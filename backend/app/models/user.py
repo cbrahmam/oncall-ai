@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 from app.database import Base
+from app.models.team import team_members  # Add this import
 
 class User(Base):
     __tablename__ = "users"
@@ -51,6 +52,11 @@ class User(Base):
     # Fixed relationships with explicit foreign keys
     runbooks = relationship("Runbook", back_populates="created_by", foreign_keys="Runbook.created_by_id")
     audit_logs = relationship("AuditLog", back_populates="user", foreign_keys="AuditLog.user_id")
+    teams = relationship("Team", secondary=team_members, back_populates="members")
     
+    # On-call schedule fields
+    on_call_start = Column(DateTime(timezone=True))
+    on_call_end = Column(DateTime(timezone=True))
+    is_currently_on_call = Column(Boolean, default=False)
     def __repr__(self):
         return f"<User(email='{self.email}', role='{self.role}')>"

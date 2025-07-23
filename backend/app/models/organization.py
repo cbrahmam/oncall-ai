@@ -28,5 +28,6 @@ class Organization(Base):
     runbooks = relationship("Runbook", back_populates="organization")
     audit_logs = relationship("AuditLog", back_populates="organization")
     users = relationship("User", back_populates="organization")
+    teams = relationship("Team", back_populates="organization") 
     def __repr__(self):
         return f"<Organization(name='{self.name}', slug='{self.slug}')>"

@@ -6,6 +6,7 @@ from .escalation_policy import EscalationPolicy
 from .integration import Integration
 from .runbook import Runbook
 from .audit_log import AuditLog
+from .team import Team
 
 __all__ = [
     "Organization",
@@ -15,5 +16,6 @@ __all__ = [
     "EscalationPolicy",
     "Integration",
     "Runbook",
-    "AuditLog"
+    "AuditLog",
+    "Team"
 ]
