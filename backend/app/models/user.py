@@ -37,6 +37,11 @@ class User(Base):
     # Skills for smart routing
     skills = Column(JSON, default=[])  # ["database", "frontend", "kubernetes"]
     
+    # On-call schedule fields
+    on_call_start = Column(DateTime(timezone=True))
+    on_call_end = Column(DateTime(timezone=True))
+    is_currently_on_call = Column(Boolean, default=False)
+    
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -45,18 +50,10 @@ class User(Base):
     # Relationships - FIXED with explicit foreign_keys
     organization = relationship("Organization", back_populates="users")
     
-    # These relationships need explicit foreign_keys because there are multiple FK paths
-    # Remove the problematic assigned_incidents relationship for now
-    # assigned_incidents = relationship("Incident", back_populates="assigned_user")
-    
     # Fixed relationships with explicit foreign keys
     runbooks = relationship("Runbook", back_populates="created_by", foreign_keys="Runbook.created_by_id")
     audit_logs = relationship("AuditLog", back_populates="user", foreign_keys="AuditLog.user_id")
     teams = relationship("Team", secondary=team_members, back_populates="members")
     
-    # On-call schedule fields
-    on_call_start = Column(DateTime(timezone=True))
-    on_call_end = Column(DateTime(timezone=True))
-    is_currently_on_call = Column(Boolean, default=False)
     def __repr__(self):
         return f"<User(email='{self.email}', role='{self.role}')>"
