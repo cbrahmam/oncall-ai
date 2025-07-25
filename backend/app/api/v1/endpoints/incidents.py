@@ -6,6 +6,7 @@ from app.database import get_async_session
 from app.core.security import get_current_user
 from app.models.user import User
 from app.services.incident_service import IncidentService
+from app.services.notification_service import NotificationService
 from app.schemas.incident import (
     IncidentCreate, IncidentUpdate, IncidentResponse, IncidentListResponse,
     IncidentFilters, IncidentStatus, IncidentSeverity
@@ -21,13 +22,22 @@ async def create_incident(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Create a new incident"""
+    """Create a new incident with notifications"""
     service = IncidentService(db)
+    
+    # Create the incident
     incident = await service.create_incident(
         incident_data=incident_data,
         user_id=str(current_user.id),
         organization_id=str(current_user.organization_id)
     )
+    
+    # Send notifications
+    try:
+        notification_service = NotificationService(db)
+        await notification_service.notify_incident_created(incident)
+    except Exception as e:
+        print(f"Notification failed: {e}")
     
     # Get the incident with relationships loaded
     full_incident = await service.get_incident(
@@ -35,9 +45,7 @@ async def create_incident(
         organization_id=str(current_user.organization_id)
     )
     
-    # Convert to response format
-    incident_response = service._incident_to_response(full_incident)
-    return incident_response
+    return service._incident_to_response(full_incident)
 
 @router.get("/", response_model=IncidentListResponse)
 async def list_incidents(
@@ -110,19 +118,41 @@ async def update_incident(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Update an incident"""
+    """Update an incident with notifications"""
     service = IncidentService(db)
-    incident = await service.update_incident(
+    
+    # Get current incident state
+    incident = await service.get_incident(incident_id, str(current_user.organization_id))
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    
+    old_status = incident.status
+    
+    # Update incident
+    updated_incident = await service.update_incident(
         incident_id=incident_id,
         organization_id=str(current_user.organization_id),
         update_data=update_data,
         user_id=str(current_user.id)
     )
     
-    if not incident:
+    if not updated_incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     
-    return service._incident_to_response(incident)
+    # Send notifications for status changes
+    try:
+        notification_service = NotificationService(db)
+        
+        if (update_data.status == IncidentStatus.ACKNOWLEDGED and 
+            old_status != IncidentStatus.ACKNOWLEDGED):
+            await notification_service.notify_incident_acknowledged(updated_incident, current_user)
+        elif (update_data.status == IncidentStatus.RESOLVED and 
+              old_status != IncidentStatus.RESOLVED):
+            await notification_service.notify_incident_resolved(updated_incident, current_user)
+    except Exception as e:
+        print(f"Notification failed: {e}")
+    
+    return service._incident_to_response(updated_incident)
 
 @router.delete("/{incident_id}")
 async def delete_incident(
@@ -148,24 +178,40 @@ async def acknowledge_incident(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Quick action: Acknowledge an incident"""
+    """Quick action: Acknowledge an incident with notifications"""
+    service = IncidentService(db)
+    
+    # Get current incident
+    incident = await service.get_incident(incident_id, str(current_user.organization_id))
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    
+    old_status = incident.status
+    
     update_data = IncidentUpdate(
         status=IncidentStatus.ACKNOWLEDGED,
         assigned_to_id=str(current_user.id)
     )
     
-    service = IncidentService(db)
-    incident = await service.update_incident(
+    updated_incident = await service.update_incident(
         incident_id=incident_id,
         organization_id=str(current_user.organization_id),
         update_data=update_data,
         user_id=str(current_user.id)
     )
     
-    if not incident:
+    if not updated_incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     
-    return service._incident_to_response(incident)
+    # Send acknowledgment notification
+    try:
+        if old_status != IncidentStatus.ACKNOWLEDGED:
+            notification_service = NotificationService(db)
+            await notification_service.notify_incident_acknowledged(updated_incident, current_user)
+    except Exception as e:
+        print(f"Notification failed: {e}")
+    
+    return service._incident_to_response(updated_incident)
 
 @router.post("/{incident_id}/resolve", response_model=IncidentResponse)
 async def resolve_incident(
@@ -173,20 +219,36 @@ async def resolve_incident(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Quick action: Resolve an incident"""
+    """Quick action: Resolve an incident with notifications"""
+    service = IncidentService(db)
+    
+    # Get current incident
+    incident = await service.get_incident(incident_id, str(current_user.organization_id))
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    
+    old_status = incident.status
+    
     update_data = IncidentUpdate(
         status=IncidentStatus.RESOLVED
     )
     
-    service = IncidentService(db)
-    incident = await service.update_incident(
+    updated_incident = await service.update_incident(
         incident_id=incident_id,
         organization_id=str(current_user.organization_id),
         update_data=update_data,
         user_id=str(current_user.id)
     )
     
-    if not incident:
+    if not updated_incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     
-    return service._incident_to_response(incident)
+    # Send resolution notification
+    try:
+        if old_status != IncidentStatus.RESOLVED:
+            notification_service = NotificationService(db)
+            await notification_service.notify_incident_resolved(updated_incident, current_user)
+    except Exception as e:
+        print(f"Notification failed: {e}")
+    
+    return service._incident_to_response(updated_incident)

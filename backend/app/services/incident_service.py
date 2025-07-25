@@ -3,7 +3,7 @@ from typing import Optional, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload
-
+from app.services.notification_service import NotificationService
 from app.models.incident import Incident
 from app.models.user import User
 from app.schemas.incident import (
@@ -65,6 +65,96 @@ class IncidentService:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
+    async def create_incident_with_notifications(
+        self, 
+        incident_data: IncidentCreate, 
+        user_id: str, 
+        organization_id: str
+    ) -> Incident:
+        """Create incident and send notifications"""
+        # Create the incident (existing logic)
+        incident = Incident(
+            title=incident_data.title,
+            description=incident_data.description,
+            severity=incident_data.severity,
+            status=IncidentStatus.OPEN,
+            tags=incident_data.tags or [],
+            created_by_id=user_id,
+            organization_id=organization_id
+        )
+        
+        self.db.add(incident)
+        await self.db.commit()
+        await self.db.refresh(incident)
+        
+        # Load relationships
+        if incident.created_by_id:
+            await self.db.refresh(incident, ['created_by'])
+        
+        # Send notifications
+        try:
+            notification_service = NotificationService(self.db)
+            await notification_service.notify_incident_created(incident)
+        except Exception as e:
+            print(f"Notification failed: {e}")
+            # Don't fail the incident creation if notifications fail
+        
+        return incident
+
+    async def update_incident_with_notifications(
+        self,
+        incident_id: str,
+        organization_id: str,
+        update_data: IncidentUpdate,
+        user_id: str
+    ) -> Optional[Incident]:
+        """Update incident and send notifications"""
+        incident = await self.get_incident(incident_id, organization_id)
+        if not incident:
+            return None
+
+        # Track status changes
+        old_status = incident.status
+        
+        # Update fields (existing logic)
+        update_dict = update_data.dict(exclude_unset=True)
+        for field, value in update_dict.items():
+            setattr(incident, field, value)
+        
+        # Set timestamps
+        if (update_data.status == IncidentStatus.ACKNOWLEDGED and 
+            old_status != IncidentStatus.ACKNOWLEDGED):
+            incident.acknowledged_at = datetime.utcnow()
+            incident.acknowledged_by_id = user_id
+        elif (update_data.status == IncidentStatus.RESOLVED and 
+            old_status != IncidentStatus.RESOLVED):
+            incident.resolved_at = datetime.utcnow()
+            incident.resolved_by_id = user_id
+        elif (old_status == IncidentStatus.RESOLVED and 
+            update_data.status and update_data.status != IncidentStatus.RESOLVED):
+            incident.resolved_at = None
+            incident.resolved_by_id = None
+
+        await self.db.commit()
+        await self.db.refresh(incident)
+        
+        # Load user relationships for notifications
+        await self.db.refresh(incident, ['acknowledged_by', 'resolved_by'])
+        
+        # Send notifications based on status change
+        try:
+            notification_service = NotificationService(self.db)
+            
+            if (update_data.status == IncidentStatus.ACKNOWLEDGED and 
+                old_status != IncidentStatus.ACKNOWLEDGED and incident.acknowledged_by):
+                await notification_service.notify_incident_acknowledged(incident, incident.acknowledged_by)
+            elif (update_data.status == IncidentStatus.RESOLVED and 
+                old_status != IncidentStatus.RESOLVED and incident.resolved_by):
+                await notification_service.notify_incident_resolved(incident, incident.resolved_by)
+        except Exception as e:
+            print(f"Notification failed: {e}")
+        
+        return incident
     async def list_incidents(
         self,
         organization_id: str,

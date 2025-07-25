@@ -107,7 +107,11 @@ class AlertService:
         
         incident_id = None
         incident_created = False
-        
+        try:
+            notification_service = NotificationService(self.db)
+            await notification_service.notify_incident_created(incident)
+        except Exception as e:
+            print(f"Notification failed: {e}")
         if should_create_incident:
             # Create incident from alert
             incident_data = await self._alert_to_incident(alert_data, str(new_alert.id))

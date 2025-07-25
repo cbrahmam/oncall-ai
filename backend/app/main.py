@@ -1,12 +1,33 @@
-# app/main.py (Updated with webhooks and incident endpoints)
+# app/main.py (Updated with webhooks, incident endpoints, and background workers)
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1.endpoints import auth, incidents, webhooks, teams
-# Create FastAPI app
+from app.api.v1.endpoints import auth, incidents, webhooks, teams, slack
+# from app.background.worker import start_background_workers  # Disabled for now
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start background workers (disabled for now due to async session issues)
+    print("🚀 OnCall AI starting up...")
+    # background_task = asyncio.create_task(start_background_workers())
+    
+    yield
+    
+    # Cleanup on shutdown
+    print("🛑 OnCall AI shutting down...")
+    # background_task.cancel()
+    # try:
+    #     await background_task
+    # except asyncio.CancelledError:
+    #     pass
+
+# Create FastAPI app with lifespan
 app = FastAPI(
     title="OnCall AI API",
     description="AI-powered incident response and oncall management platform",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS
@@ -89,11 +110,11 @@ async def test_tables():
 
 # Include routes
 try:
-    from app.api.v1.endpoints import auth, incidents, webhooks
     app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
     app.include_router(incidents.router, prefix="/api/v1/incidents", tags=["Incidents"])
     app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
     app.include_router(teams.router, prefix="/api/v1/teams", tags=["Teams"])
+    app.include_router(slack.router, prefix="/api/v1/slack", tags=["Slack"])
     print("✅ All endpoints loaded successfully")
 except Exception as e:
     print(f"❌ Failed to load endpoints: {e}")
