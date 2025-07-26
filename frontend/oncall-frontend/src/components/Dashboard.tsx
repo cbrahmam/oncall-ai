@@ -1,3 +1,4 @@
+// frontend/oncall-frontend/src/components/Dashboard.tsx (Updated with navigation)
 import React, { useState, useEffect } from 'react';
 import { 
   FireIcon, 
@@ -7,7 +8,10 @@ import {
   UserGroupIcon,
   BellIcon,
   ChartBarIcon,
-  CogIcon
+  CogIcon,
+  EyeIcon,
+  ArrowUpIcon,
+  ArrowDownIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
 import CreateIncidentModal from './CreateIncidentModal';
@@ -21,8 +25,12 @@ interface DashboardStats {
   team_members: number;
 }
 
-const Dashboard: React.FC = () => {
-  const { user, logout } = useAuth();
+interface DashboardProps {
+  onNavigateToIncident?: (incidentId: string) => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
+  const { user } = useAuth(); // Removed unused 'logout'
   const [stats, setStats] = useState<DashboardStats>({
     total_incidents: 0,
     open_incidents: 0,
@@ -94,6 +102,12 @@ const Dashboard: React.FC = () => {
     fetchDashboardData();
   };
 
+  const handleIncidentClick = (incidentId: string) => {
+    if (onNavigateToIncident) {
+      onNavigateToIncident(incidentId);
+    }
+  };
+
   const StatCard = ({ title, value, icon: Icon, color, trend }: any) => (
     <div className="glass-card rounded-xl p-6 hover:scale-105 transition-transform duration-200">
       <div className="flex items-center justify-between">
@@ -101,12 +115,13 @@ const Dashboard: React.FC = () => {
           <p className="text-gray-300 text-sm font-medium">{title}</p>
           <p className="text-2xl font-bold text-white mt-1">{value}</p>
           {trend && (
-            <p className={`text-sm mt-1 ${trend > 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {trend > 0 ? '↗' : '↘'} {Math.abs(trend)}% from yesterday
+            <p className={`text-sm mt-1 flex items-center ${trend > 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {trend > 0 ? <ArrowUpIcon className="w-4 h-4 mr-1" /> : <ArrowDownIcon className="w-4 h-4 mr-1" />}
+              {Math.abs(trend)}% from yesterday
             </p>
           )}
         </div>
-        <div className={`p-3 rounded-lg ${color}`}>
+        <div className={`p-3 rounded-full ${color}`}>
           <Icon className="w-6 h-6 text-white" />
         </div>
       </div>
@@ -114,60 +129,98 @@ const Dashboard: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-900">
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-slate-900 p-6">
+      <main className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white">
+                Welcome back, {user?.full_name || 'User'}! 👋
+              </h1>
+              <p className="text-gray-400 mt-2">
+                Here's what's happening with your incidents today.
+              </p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="glass-card px-4 py-2 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span className="text-green-300 text-sm font-medium">Systems Operational</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard
             title="Total Incidents"
             value={stats.total_incidents}
-            icon={ChartBarIcon}
-            color="bg-blue-500/20"
-            trend={5}
+            icon={BellIcon}
+            color="bg-blue-500"
+            trend={12}
           />
           <StatCard
             title="Open Incidents"
             value={stats.open_incidents}
             icon={ExclamationTriangleIcon}
-            color="bg-yellow-500/20"
+            color="bg-orange-500"
+            trend={-8}
           />
           <StatCard
-            title="Critical"
+            title="Critical Incidents"
             value={stats.critical_incidents}
             icon={FireIcon}
-            color="bg-red-500/20"
+            color="bg-red-500"
+            trend={-15}
           />
           <StatCard
             title="Resolved Today"
             value={stats.resolved_today}
             icon={CheckCircleIcon}
-            color="bg-green-500/20"
-            trend={-2}
+            color="bg-green-500"
+            trend={25}
           />
+        </div>
+
+        {/* Additional Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <StatCard
-            title="Avg Response"
+            title="Avg Response Time"
             value={stats.avg_response_time}
             icon={ClockIcon}
-            color="bg-purple-500/20"
+            color="bg-purple-500"
+            trend={-5}
           />
           <StatCard
             title="Team Members"
             value={stats.team_members}
             icon={UserGroupIcon}
-            color="bg-indigo-500/20"
+            color="bg-indigo-500"
+          />
+          <StatCard
+            title="SLA Compliance"
+            value="98.5%"
+            icon={ChartBarIcon}
+            color="bg-emerald-500"
+            trend={2}
           />
         </div>
 
         {/* Recent Incidents */}
-        <div className="glass-card rounded-xl p-6">
+        <div className="glass-card rounded-xl p-6 mb-8">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-white">Recent Incidents</h2>
-            <button className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 px-4 py-2 rounded-lg transition-colors">
-              View All
+            <h2 className="text-xl font-semibold text-white">Recent Incidents</h2>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
+            >
+              Create Incident
             </button>
           </div>
-          
+
           {isLoading ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
@@ -185,7 +238,11 @@ const Dashboard: React.FC = () => {
           ) : (
             <div className="space-y-4">
               {recentIncidents.map((incident: any) => (
-                <div key={incident.id} className="bg-white/5 rounded-lg p-4 hover:bg-white/10 transition-colors cursor-pointer">
+                <div 
+                  key={incident.id} 
+                  className="bg-white/5 rounded-lg p-4 hover:bg-white/10 transition-colors cursor-pointer group"
+                  onClick={() => handleIncidentClick(incident.id)}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       <div className={`w-3 h-3 rounded-full ${
@@ -194,8 +251,13 @@ const Dashboard: React.FC = () => {
                         incident.severity === 'medium' ? 'bg-yellow-500' :
                         'bg-green-500'
                       }`}></div>
-                      <div>
-                        <h3 className="text-white font-medium">{incident.title}</h3>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2">
+                          <h3 className="text-white font-medium group-hover:text-blue-300 transition-colors">
+                            {incident.title}
+                          </h3>
+                          <EyeIcon className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
                         <p className="text-gray-400 text-sm">
                           {incident.created_by_name} • {new Date(incident.created_at).toLocaleString()}
                         </p>
@@ -213,7 +275,7 @@ const Dashboard: React.FC = () => {
                         incident.severity === 'critical' ? 'bg-red-500/20 text-red-300' :
                         incident.severity === 'high' ? 'bg-orange-500/20 text-orange-300' :
                         incident.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
-                        'bg-green-500/20 text-green-300'
+                        'bg-blue-500/20 text-blue-300'
                       }`}>
                         {incident.severity}
                       </span>
@@ -226,30 +288,30 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <button 
             onClick={() => setShowCreateModal(true)}
-            className="glass-card rounded-xl p-6 hover:scale-105 transition-transform duration-200 text-left"
+            className="glass-card rounded-xl p-6 hover:scale-105 transition-transform duration-200 text-left group"
           >
-            <BellIcon className="w-8 h-8 text-blue-400 mb-3" />
+            <BellIcon className="w-8 h-8 text-blue-400 mb-3 group-hover:text-blue-300 transition-colors" />
             <h3 className="text-lg font-semibold text-white mb-2">Create Incident</h3>
             <p className="text-gray-400 text-sm">Manually create a new incident</p>
           </button>
           
           <button 
             onClick={() => window.location.href = '/teams'}
-            className="glass-card rounded-xl p-6 hover:scale-105 transition-transform duration-200 text-left"
+            className="glass-card rounded-xl p-6 hover:scale-105 transition-transform duration-200 text-left group"
           >
-            <UserGroupIcon className="w-8 h-8 text-green-400 mb-3" />
+            <UserGroupIcon className="w-8 h-8 text-green-400 mb-3 group-hover:text-green-300 transition-colors" />
             <h3 className="text-lg font-semibold text-white mb-2">Manage Teams</h3>
             <p className="text-gray-400 text-sm">Configure teams and on-call schedules</p>
           </button>
           
           <button 
             onClick={() => window.location.href = '/settings'}
-            className="glass-card rounded-xl p-6 hover:scale-105 transition-transform duration-200 text-left"
+            className="glass-card rounded-xl p-6 hover:scale-105 transition-transform duration-200 text-left group"
           >
-            <CogIcon className="w-8 h-8 text-purple-400 mb-3" />
+            <CogIcon className="w-8 h-8 text-purple-400 mb-3 group-hover:text-purple-300 transition-colors" />
             <h3 className="text-lg font-semibold text-white mb-2">Settings</h3>
             <p className="text-gray-400 text-sm">Configure integrations and preferences</p>
           </button>
