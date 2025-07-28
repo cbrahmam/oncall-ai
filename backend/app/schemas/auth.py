@@ -1,46 +1,50 @@
-from pydantic import BaseModel, EmailStr, validator
+# backend/app/schemas/auth.py - Updated with refresh token support
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
-import uuid
+from datetime import datetime
 
-class UserRegister(BaseModel):
-    email: EmailStr
-    password: str
-    full_name: str
-    organization_name: Optional[str] = None
-    organization_slug: Optional[str] = None
-    
-    @validator('password')
-    def validate_password(cls, v):
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters long')
-        return v
-    
-    @validator('organization_slug')
-    def validate_slug(cls, v):
-        if v and not v.replace('-', '').replace('_', '').isalnum():
-            raise ValueError('Organization slug can only contain letters, numbers, hyphens, and underscores')
-        return v
+class UserCreate(BaseModel):
+    """User registration schema"""
+    email: EmailStr = Field(..., description="User email address")
+    password: str = Field(..., min_length=8, description="Password (min 8 characters)")
+    full_name: str = Field(..., min_length=2, description="Full name")
+    organization_name: str = Field(..., min_length=2, description="Organization name")
 
 class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
+    """User login schema"""
+    email: EmailStr = Field(..., description="User email address")
+    password: str = Field(..., description="User password")
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int
-
-class TokenData(BaseModel):
-    user_id: Optional[str] = None
-    organization_id: Optional[str] = None
+class RefreshTokenRequest(BaseModel):
+    """Refresh token request schema"""
+    refresh_token: str = Field(..., description="Refresh token")
 
 class UserResponse(BaseModel):
-    id: uuid.UUID
-    email: str
-    full_name: str
-    role: str
-    is_active: bool
-    organization_id: uuid.UUID
-    
-    class Config:
-        from_attributes = True
+    """User response schema with tokens"""
+    message: Optional[str] = None
+    access_token: str = Field(..., description="JWT access token")
+    refresh_token: Optional[str] = Field(None, description="Refresh token for automatic renewal")
+    token_type: str = Field(default="bearer", description="Token type")
+    expires_in: int = Field(..., description="Token expiration time in seconds")
+    user: dict = Field(..., description="User information")
+
+class TokenRefreshResponse(BaseModel):
+    """Token refresh response schema"""
+    access_token: str = Field(..., description="New JWT access token")
+    refresh_token: str = Field(..., description="New refresh token")
+    token_type: str = Field(default="bearer", description="Token type")
+    expires_in: int = Field(..., description="Token expiration time in seconds")
+
+class LogoutResponse(BaseModel):
+    """Logout response schema"""
+    message: str = Field(default="Logged out successfully", description="Logout confirmation")
+
+class UserInfo(BaseModel):
+    """User information schema"""
+    id: str = Field(..., description="User ID")
+    email: str = Field(..., description="User email")
+    full_name: str = Field(..., description="User full name")
+    role: str = Field(..., description="User role")
+    organization_id: str = Field(..., description="Organization ID")
+    is_verified: bool = Field(..., description="Email verification status")
+    created_at: str = Field(..., description="Account creation timestamp")
