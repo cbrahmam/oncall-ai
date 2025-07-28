@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "react-native-safe-area-context": "^5.5.2",
+    "react-native-screens": "^4.13.1"
+  }
+}
