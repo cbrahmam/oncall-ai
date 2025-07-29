@@ -7,12 +7,13 @@ Implements rate limiting, security headers, attack detection
 import time
 import json
 from typing import Callable, Dict, Any
-from fastapi import FastAPI, Request, Response, HTTPException, status
+from fastapi import FastAPI, Request, Response, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.core.deps import get_current_user  # Add this import
 from app.core.enhanced_security import (
     rate_limiter, 
     security_logger, 
@@ -248,12 +249,13 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 # Enhanced Auth Endpoints with MFA
 # backend/app/api/v1/endpoints/secure_auth.py
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer
-from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, EmailStr
+from fastapi import FastAPI, Request, Response, HTTPException, status, Depends
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.database import get_async_session
+from app.core.deps import get_current_user  # Add this import
 from app.core.enhanced_security import (
     token_manager,
     mfa_manager, 

@@ -68,8 +68,26 @@ class RiskLevel(Enum):
 # Enhanced JWT Token Manager
 class EnhancedTokenManager:
     def __init__(self):
-        self.redis = get_redis()
-        self.cipher = Fernet(settings.ENCRYPTION_KEY.encode()[:32].ljust(32, b'0'))
+        self.redis = redis.from_url(settings.REDIS_URL)
+        
+        # Fix Fernet key generation
+        try:
+            from cryptography.fernet import Fernet
+            import hashlib
+            
+            # Use the encryption key to generate a proper Fernet key
+            key_material = settings.ENCRYPTION_KEY.encode()
+            # Hash it to get consistent 32 bytes
+            key_hash = hashlib.sha256(key_material).digest()
+            # Encode as base64 for Fernet
+            fernet_key = base64.urlsafe_b64encode(key_hash)
+            
+            self.cipher = Fernet(fernet_key)
+            
+        except Exception as e:
+            print(f"⚠️  Encryption setup failed: {e}, using new key")
+            # Fallback: generate a new key
+            self.cipher = Fernet(Fernet.generate_key())
     
     async def create_token_pair(self, user_id: str, device_fingerprint: str, 
                                session_data: Dict = None) -> Dict[str, str]:

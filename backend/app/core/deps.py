@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
 from app.database import get_db
 from app.models.user import User
 from app.models.organization import Organization
@@ -33,7 +34,7 @@ async def get_current_user(
     
     # Get user from database
     result = await db.execute(
-        "SELECT * FROM users WHERE id = :user_id AND is_active = true",
+        text("SELECT * FROM users WHERE id = :user_id AND is_active = true"),
         {"user_id": user_id}
     )
     user_data = result.fetchone()
@@ -58,7 +59,7 @@ async def get_current_organization(
     """Get current user's organization"""
     
     result = await db.execute(
-        "SELECT * FROM organizations WHERE id = :org_id AND is_active = true",
+        text("SELECT * FROM organizations WHERE id = :org_id AND is_active = true"),
         {"org_id": str(current_user.organization_id)}
     )
     org_data = result.fetchone()

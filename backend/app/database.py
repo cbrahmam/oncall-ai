@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 import redis.asyncio as redis
 from dotenv import load_dotenv
+from app.core.config import settings
 
 load_dotenv()
 
@@ -44,7 +45,8 @@ async def get_async_session():
             await session.close()
 # Dependency to get Redis client
 async def get_redis():
-    return redis_client
+    """Get async Redis connection"""
+    return redis.from_url(settings.REDIS_URL)
 
 # Database initialization
 async def init_db():
@@ -68,4 +70,13 @@ async def check_redis_health():
         await redis_client.ping()
         return True
     except Exception:
+        return False
+async def test_db_connection():
+    """Test database connection"""
+    try:
+        async with get_async_session() as db:
+            await db.execute("SELECT 1")
+        return True
+    except Exception as e:
+        print(f"Database connection test failed: {e}")
         return False
