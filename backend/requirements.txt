@@ -59,3 +59,5 @@ sendgrid==6.10.0
 slack-sdk==3.27.1
 aiohttp==3.9.1
 twilio==8.10.0
+
+bcrypt==4.0.1

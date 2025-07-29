@@ -1,97 +1,120 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+# backend/app/api/v1/endpoints/incidents.py - Fixed Version
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
 
 from app.database import get_async_session
 from app.core.security import get_current_user
 from app.models.user import User
-from app.services.incident_service import IncidentService
-from app.services.notification_service import NotificationService
+from app.models.incident import Incident
 from app.schemas.incident import (
-    IncidentCreate, IncidentUpdate, IncidentResponse, IncidentListResponse,
-    IncidentFilters, IncidentStatus, IncidentSeverity
+    IncidentCreate, IncidentUpdate, IncidentResponse, 
+    IncidentStatus, IncidentSeverity
 )
-import math
 from datetime import datetime
+import uuid
 
 router = APIRouter()
 
+@router.get("/", response_model=List[IncidentResponse])
+@router.get("", response_model=List[IncidentResponse])  # Handle both with and without trailing slash
+async def list_incidents(
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(20, ge=1, le=100, description="Items per page"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    severity: Optional[str] = Query(None, description="Filter by severity"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Get all incidents for the current user's organization"""
+    try:
+        # Build base query
+        query = select(Incident).where(
+            Incident.organization_id == current_user.organization_id
+        )
+        
+        # Add filters
+        if status:
+            try:
+                status_enum = IncidentStatus(status.lower())
+                query = query.where(Incident.status == status_enum)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Invalid status. Must be one of: {[s.value for s in IncidentStatus]}"
+                )
+        
+        if severity:
+            try:
+                severity_enum = IncidentSeverity(severity.lower())
+                query = query.where(Incident.severity == severity_enum)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Invalid severity. Must be one of: {[s.value for s in IncidentSeverity]}"
+                )
+        
+        # Add ordering (newest first)
+        query = query.order_by(Incident.created_at.desc())
+        
+        # Add pagination
+        offset = (page - 1) * per_page
+        query = query.offset(offset).limit(per_page)
+        
+        # Execute query
+        result = await db.execute(query)
+        incidents = result.scalars().all()
+        
+        # Convert to response format
+        return [_incident_to_response(incident) for incident in incidents]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error listing incidents: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve incidents"
+        )
+
 @router.post("/", response_model=IncidentResponse)
+@router.post("", response_model=IncidentResponse)
 async def create_incident(
     incident_data: IncidentCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Create a new incident with notifications"""
-    service = IncidentService(db)
-    
-    # Create the incident
-    incident = await service.create_incident(
-        incident_data=incident_data,
-        user_id=str(current_user.id),
-        organization_id=str(current_user.organization_id)
-    )
-    
-    # Send notifications
+    """Create a new incident"""
     try:
-        notification_service = NotificationService(db)
-        await notification_service.notify_incident_created(incident)
+        # Create new incident
+        new_incident = Incident(
+            id=uuid.uuid4(),
+            organization_id=current_user.organization_id,
+            title=incident_data.title,
+            description=incident_data.description,
+            severity=IncidentSeverity(incident_data.severity),
+            status=IncidentStatus.OPEN,
+            source=incident_data.source or "manual",
+            created_by=current_user.id,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        
+        db.add(new_incident)
+        await db.commit()
+        await db.refresh(new_incident)
+        
+        return _incident_to_response(new_incident)
+        
     except Exception as e:
-        print(f"Notification failed: {e}")
-    
-    # Get the incident with relationships loaded
-    full_incident = await service.get_incident(
-        incident_id=str(incident.id),
-        organization_id=str(current_user.organization_id)
-    )
-    
-    return service._incident_to_response(full_incident)
-
-@router.get("/", response_model=IncidentListResponse)
-async def list_incidents(
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
-    status: Optional[str] = Query(None, description="Comma-separated list of statuses"),
-    severity: Optional[str] = Query(None, description="Comma-separated list of severities"),
-    assigned_to_id: Optional[str] = Query(None),
-    created_after: Optional[datetime] = Query(None),
-    created_before: Optional[datetime] = Query(None),
-    tags: Optional[str] = Query(None, description="Comma-separated list of tags"),
-    search: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """List incidents with filtering and pagination"""
-    
-    # Parse comma-separated filters
-    filters = IncidentFilters(
-        status=[IncidentStatus(s.strip()) for s in status.split(",")] if status else None,
-        severity=[IncidentSeverity(s.strip()) for s in severity.split(",")] if severity else None,
-        assigned_to_id=assigned_to_id,
-        created_after=created_after,
-        created_before=created_before,
-        tags=[t.strip() for t in tags.split(",")] if tags else None,
-        search=search
-    )
-    
-    service = IncidentService(db)
-    incidents, total = await service.list_incidents(
-        organization_id=current_user.organization_id,
-        filters=filters,
-        page=page,
-        per_page=per_page
-    )
-    
-    # Convert incidents to response format
-    incident_responses = [service._incident_to_response(incident) for incident in incidents]
-    
-    return IncidentListResponse(
-        incidents=incident_responses,
-        total=total,
-        page=page,
-        per_page=per_page,
-        total_pages=math.ceil(total / per_page) if total > 0 else 0
-    )
+        await db.rollback()
+        print(f"Error creating incident: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create incident"
+        )
 
 @router.get("/{incident_id}", response_model=IncidentResponse)
 async def get_incident(
@@ -99,156 +122,133 @@ async def get_incident(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Get a specific incident"""
-    service = IncidentService(db)
-    incident = await service.get_incident(
-        incident_id=incident_id,
-        organization_id=str(current_user.organization_id)
-    )
-    
-    if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    
-    return service._incident_to_response(incident)
-
-@router.patch("/{incident_id}", response_model=IncidentResponse)
-async def update_incident(
-    incident_id: str,
-    update_data: IncidentUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Update an incident with notifications"""
-    service = IncidentService(db)
-    
-    # Get current incident state
-    incident = await service.get_incident(incident_id, str(current_user.organization_id))
-    if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    
-    old_status = incident.status
-    
-    # Update incident
-    updated_incident = await service.update_incident(
-        incident_id=incident_id,
-        organization_id=str(current_user.organization_id),
-        update_data=update_data,
-        user_id=str(current_user.id)
-    )
-    
-    if not updated_incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    
-    # Send notifications for status changes
+    """Get a specific incident by ID"""
     try:
-        notification_service = NotificationService(db)
+        # Parse UUID
+        try:
+            incident_uuid = uuid.UUID(incident_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid incident ID format")
         
-        if (update_data.status == IncidentStatus.ACKNOWLEDGED and 
-            old_status != IncidentStatus.ACKNOWLEDGED):
-            await notification_service.notify_incident_acknowledged(updated_incident, current_user)
-        elif (update_data.status == IncidentStatus.RESOLVED and 
-              old_status != IncidentStatus.RESOLVED):
-            await notification_service.notify_incident_resolved(updated_incident, current_user)
+        # Query incident
+        query = select(Incident).where(
+            and_(
+                Incident.id == incident_uuid,
+                Incident.organization_id == current_user.organization_id
+            )
+        )
+        
+        result = await db.execute(query)
+        incident = result.scalar_one_or_none()
+        
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        
+        return _incident_to_response(incident)
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Notification failed: {e}")
-    
-    return service._incident_to_response(updated_incident)
+        print(f"Error getting incident: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve incident"
+        )
 
-@router.delete("/{incident_id}")
-async def delete_incident(
-    incident_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Delete an incident"""
-    service = IncidentService(db)
-    success = await service.delete_incident(
-        incident_id=incident_id,
-        organization_id=str(current_user.organization_id)
-    )
-    
-    if not success:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    
-    return {"message": "Incident deleted successfully"}
-
-@router.post("/{incident_id}/acknowledge", response_model=IncidentResponse)
+@router.patch("/{incident_id}/acknowledge", response_model=IncidentResponse)
 async def acknowledge_incident(
     incident_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Quick action: Acknowledge an incident with notifications"""
-    service = IncidentService(db)
-    
-    # Get current incident
-    incident = await service.get_incident(incident_id, str(current_user.organization_id))
-    if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    
-    old_status = incident.status
-    
-    update_data = IncidentUpdate(
-        status=IncidentStatus.ACKNOWLEDGED,
-        assigned_to_id=str(current_user.id)
-    )
-    
-    updated_incident = await service.update_incident(
-        incident_id=incident_id,
-        organization_id=str(current_user.organization_id),
-        update_data=update_data,
-        user_id=str(current_user.id)
-    )
-    
-    if not updated_incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    
-    # Send acknowledgment notification
-    try:
-        if old_status != IncidentStatus.ACKNOWLEDGED:
-            notification_service = NotificationService(db)
-            await notification_service.notify_incident_acknowledged(updated_incident, current_user)
-    except Exception as e:
-        print(f"Notification failed: {e}")
-    
-    return service._incident_to_response(updated_incident)
+    """Acknowledge an incident"""
+    return await _update_incident_status(incident_id, IncidentStatus.ACKNOWLEDGED, current_user, db)
 
-@router.post("/{incident_id}/resolve", response_model=IncidentResponse)
+@router.patch("/{incident_id}/resolve", response_model=IncidentResponse)
 async def resolve_incident(
     incident_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Quick action: Resolve an incident with notifications"""
-    service = IncidentService(db)
-    
-    # Get current incident
-    incident = await service.get_incident(incident_id, str(current_user.organization_id))
-    if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    
-    old_status = incident.status
-    
-    update_data = IncidentUpdate(
-        status=IncidentStatus.RESOLVED
-    )
-    
-    updated_incident = await service.update_incident(
-        incident_id=incident_id,
-        organization_id=str(current_user.organization_id),
-        update_data=update_data,
-        user_id=str(current_user.id)
-    )
-    
-    if not updated_incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    
-    # Send resolution notification
+    """Resolve an incident"""
+    return await _update_incident_status(incident_id, IncidentStatus.RESOLVED, current_user, db)
+
+@router.patch("/{incident_id}/reopen", response_model=IncidentResponse)
+async def reopen_incident(
+    incident_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Reopen a resolved incident"""
+    return await _update_incident_status(incident_id, IncidentStatus.OPEN, current_user, db)
+
+# Helper functions
+async def _update_incident_status(
+    incident_id: str,
+    new_status: IncidentStatus,
+    current_user: User,
+    db: AsyncSession
+) -> IncidentResponse:
+    """Helper function to update incident status"""
     try:
-        if old_status != IncidentStatus.RESOLVED:
-            notification_service = NotificationService(db)
-            await notification_service.notify_incident_resolved(updated_incident, current_user)
+        # Parse UUID
+        try:
+            incident_uuid = uuid.UUID(incident_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid incident ID format")
+        
+        # Get incident
+        query = select(Incident).where(
+            and_(
+                Incident.id == incident_uuid,
+                Incident.organization_id == current_user.organization_id
+            )
+        )
+        
+        result = await db.execute(query)
+        incident = result.scalar_one_or_none()
+        
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        
+        # Update status
+        incident.status = new_status
+        incident.updated_at = datetime.utcnow()
+        
+        # Set resolution time if resolving
+        if new_status == IncidentStatus.RESOLVED and not incident.resolved_at:
+            incident.resolved_at = datetime.utcnow()
+        elif new_status != IncidentStatus.RESOLVED:
+            incident.resolved_at = None
+        
+        await db.commit()
+        await db.refresh(incident)
+        
+        return _incident_to_response(incident)
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Notification failed: {e}")
-    
-    return service._incident_to_response(updated_incident)
+        await db.rollback()
+        print(f"Error updating incident status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update incident"
+        )
+
+def _incident_to_response(incident: Incident) -> IncidentResponse:
+    """Convert Incident model to response format"""
+    return IncidentResponse(
+        id=str(incident.id),
+        organization_id=str(incident.organization_id),
+        title=incident.title,
+        description=incident.description,
+        severity=incident.severity.value,
+        status=incident.status.value,
+        source=incident.source,
+        created_by=str(incident.created_by) if incident.created_by else None,
+        assigned_to=str(incident.assigned_to) if incident.assigned_to else None,
+        created_at=incident.created_at,
+        updated_at=incident.updated_at,
+        resolved_at=incident.resolved_at
+    )

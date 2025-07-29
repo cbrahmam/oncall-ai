@@ -1,57 +1,44 @@
+# backend/app/core/config.py - Fixed Version for Pydantic v2
 from pydantic_settings import BaseSettings
-from typing import List
 import os
+from typing import Optional
 
 class Settings(BaseSettings):
-    # App
-    APP_NAME: str = "OnCall AI"
-    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    """Application settings with proper defaults"""
     
     # Database
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", 
-        "postgresql://admin:password@localhost:5432/oncall_ai"
-    )
+    DATABASE_URL: str = "postgresql+asyncpg://oncall_user:oncall_password@localhost:5432/oncall_ai"
+    REDIS_URL: str = "redis://localhost:6379"
     
-    # Redis
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    # JWT Settings
+    SECRET_KEY: str = "your-super-secret-jwt-key-change-in-production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_DAYS: int = 7  # Changed to days for clarity
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = ACCESS_TOKEN_EXPIRE_DAYS * 24 * 60  # Backwards compatibility
     
-    # JWT
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", SECRET_KEY)
-    JWT_ALGORITHM: str = "HS256"
-    ALGORITHM: str = JWT_ALGORITHM  # Alias for JWT_ALGORITHM
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    # Alternative JWT settings (for compatibility)
+    JWT_SECRET_KEY: str = SECRET_KEY
+    JWT_ALGORITHM: str = ALGORITHM
     
-    # OpenAI
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    # External API Keys
+    OPENAI_API_KEY: Optional[str] = None
+    SLACK_BOT_TOKEN: Optional[str] = None
+    SLACK_SIGNING_SECRET: Optional[str] = None
+    TWILIO_ACCOUNT_SID: Optional[str] = None
+    TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_PHONE_NUMBER: Optional[str] = None  # Add missing field
+    SENDGRID_API_KEY: Optional[str] = None
+    FROM_EMAIL: Optional[str] = None  # Add missing field
+    WEBHOOK_SECRET: Optional[str] = None  # Add missing field
     
-    # Twilio
-    TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
-    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
-    TWILIO_PHONE_NUMBER: str = os.getenv("TWILIO_PHONE_NUMBER", "your-twilio-phone")
-    
-    # Slack
-    SLACK_BOT_TOKEN: str = os.getenv("SLACK_BOT_TOKEN", "xoxb-your-slack-bot-token")
-    SLACK_SIGNING_SECRET: str = os.getenv("SLACK_SIGNING_SECRET", "your-slack-signing-secret")
-    
-    # SendGrid
-    SENDGRID_API_KEY: str = os.getenv("SENDGRID_API_KEY", "your-sendgrid-key")
-    FROM_EMAIL: str = os.getenv("FROM_EMAIL", "alerts@yourdomain.com")
-    
-    # Webhooks
-    WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "your-webhook-secret-key")
-    
-    # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
-    
-    # Rate limiting
-    RATE_LIMIT_REQUESTS: int = 100
-    RATE_LIMIT_WINDOW: int = 60  # seconds
+    # Environment
+    ENVIRONMENT: str = "development"
+    DEBUG: bool = True
     
     class Config:
         env_file = ".env"
-        extra = "ignore"  # This allows extra fields without errors
+        case_sensitive = True
+        extra = "ignore"  # Allow extra fields to be ignored
 
+# Create global settings instance
 settings = Settings()
