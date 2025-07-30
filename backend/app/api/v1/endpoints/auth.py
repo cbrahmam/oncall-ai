@@ -1,4 +1,4 @@
-# backend/app/api/v1/endpoints/auth.py - Fixed Version
+# backend/app/api/v1/endpoints/auth.py - Enhanced with MFA
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,6 +10,10 @@ from app.core.security import verify_password, get_password_hash, create_access_
 from app.core.config import settings
 import uuid
 from datetime import datetime
+import pyotp
+import qrcode
+import io
+import base64
 
 router = APIRouter()
 
@@ -54,7 +58,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_async_s
             updated_at=datetime.utcnow()
         )
         db.add(user)
-        
+    
         await db.commit()
         await db.refresh(user)
         await db.refresh(organization)
@@ -193,6 +197,67 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_async_sess
             detail=f"Login failed: {str(e)}"
         )
 
+# 🔐 NEW MFA ENDPOINTS
+@router.post("/setup-mfa")
+async def setup_mfa(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Setup Multi-Factor Authentication for the current user"""
+    try:
+        print(f"🔐 Setting up MFA for user: {current_user.email}")
+        
+        # Check if MFA is already enabled
+        if hasattr(current_user, 'mfa_enabled') and current_user.mfa_enabled:
+            return {
+                "message": "MFA is already enabled for this user",
+                "mfa_enabled": True
+            }
+        
+        # Generate a new secret key
+        secret = pyotp.random_base32()
+        print(f"✅ Generated MFA secret for: {current_user.email}")
+        
+        # Create TOTP URI for QR code
+        totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
+            name=current_user.email,
+            issuer_name="OnCall AI"
+        )
+        
+        # Generate QR code
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(totp_uri)
+        qr.make(fit=True)
+        
+        # Create QR code image
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Convert to base64 for API response
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format='PNG')
+        img_str = base64.b64encode(img_buffer.getvalue()).decode()
+        
+        # For now, just return the setup data
+        # In a complete implementation, you'd store the secret encrypted in the database
+        print(f"🎉 MFA setup completed for: {current_user.email}")
+        
+        return {
+            "message": "MFA setup initiated successfully",
+            "secret": secret,  # In production, don't return this directly
+            "qr_code": f"data:image/png;base64,{img_str}",
+            "backup_codes": [
+                "12345678", "87654321", "11223344", "44332211", "56789012"
+            ],  # In production, generate random codes
+            "instructions": "Scan the QR code with Google Authenticator or similar app"
+        }
+        
+    except Exception as e:
+        print(f"🚨 MFA setup error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"MFA setup failed: {str(e)}"
+        )
+
 @router.get("/me")
 async def get_current_user_info(
     current_user: User = Depends(get_current_user),
@@ -214,6 +279,7 @@ async def get_current_user_info(
             "organization_id": str(current_user.organization_id),
             "organization_name": organization.name if organization else None,
             "is_verified": current_user.is_verified,
+            "mfa_enabled": getattr(current_user, 'mfa_enabled', False),
             "created_at": current_user.created_at.isoformat()
         }
     except Exception as e:

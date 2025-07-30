@@ -1,4 +1,4 @@
-// frontend/oncall-frontend/src/App.tsx (Updated with Notification System)
+// frontend/src/App.tsx - Updated with OAuth callback route
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext';
@@ -8,13 +8,14 @@ import TeamsManagement from './components/TeamsManagement';
 import SettingsPage from './components/SettingsPage';
 import UserProfile from './components/UserProfile';
 import LandingPage from './components/LandingPage';
+import OAuthCallback from './components/OAuthCallback';
 import ToastNotifications from './components/ToastNotifications';
 import NotificationCenter from './components/NotificationCenter';
 import NotificationSettings from './components/NotificationSettings';
 import IncidentDetail from './components/IncidentDetail';
 import { BellIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 
-type Page = 'landing' | 'auth' | 'dashboard' | 'teams' | 'settings' | 'profile' | 'notifications' | 'incident-detail';
+type Page = 'landing' | 'auth' | 'dashboard' | 'teams' | 'settings' | 'profile' | 'notifications' | 'incident-detail' | 'oauth-callback';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
@@ -28,7 +29,9 @@ const AppContent: React.FC = () => {
     const path = window.location.pathname;
     const incidentMatch = path.match(/\/incidents\/([a-zA-Z0-9-]+)/);
     
-    if (incidentMatch) {
+    if (path.includes('/auth/oauth/callback')) {
+      setCurrentPage('oauth-callback');
+    } else if (incidentMatch) {
       setCurrentIncidentId(incidentMatch[1]);
       setCurrentPage('incident-detail');
     } else if (path.includes('/teams')) setCurrentPage('teams');
@@ -44,7 +47,9 @@ const AppContent: React.FC = () => {
       const newPath = window.location.pathname;
       const newIncidentMatch = newPath.match(/\/incidents\/([a-zA-Z0-9-]+)/);
       
-      if (newIncidentMatch) {
+      if (newPath.includes('/auth/oauth/callback')) {
+        setCurrentPage('oauth-callback');
+      } else if (newIncidentMatch) {
         setCurrentIncidentId(newIncidentMatch[1]);
         setCurrentPage('incident-detail');
       } else if (newPath.includes('/teams')) setCurrentPage('teams');
@@ -89,6 +94,7 @@ const AppContent: React.FC = () => {
       if (page === 'dashboard') url = '/app';
       else if (page === 'auth') url = '/auth';
       else if (page === 'landing') url = '/';
+      else if (page === 'oauth-callback') url = '/auth/oauth/callback';
       else url = `/${page}`;
       window.history.pushState(null, '', url);
     }
@@ -142,54 +148,48 @@ const AppContent: React.FC = () => {
             </button>
           </div>
 
-          {/* Right side actions */}
+          {/* User Actions */}
           <div className="flex items-center space-x-4">
-            {/* Notification Bell */}
-            <div className="relative">
-              <button
-                onClick={() => setShowNotificationCenter(true)}
-                className="relative p-2 text-gray-300 hover:text-white transition-colors rounded-lg hover:bg-white/10"
-              >
-                <BellIcon className="w-6 h-6" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-bounce-notification">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {/* Settings Shortcut */}
+            {/* Notifications */}
             <button
-              onClick={() => navigate('notifications')}
-              className="p-2 text-gray-300 hover:text-white transition-colors rounded-lg hover:bg-white/10"
-              title="Notification Settings"
+              onClick={() => setShowNotificationCenter(!showNotificationCenter)}
+              className="relative p-2 text-gray-300 hover:text-white transition-colors"
+            >
+              <BellIcon className="w-6 h-6" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Settings */}
+            <button
+              onClick={() => navigate('settings')}
+              className="p-2 text-gray-300 hover:text-white transition-colors"
             >
               <Cog6ToothIcon className="w-6 h-6" />
             </button>
 
-            {/* User Profile */}
-            <div className="relative">
+            {/* User Menu */}
+            <div className="flex items-center space-x-3">
               <button
                 onClick={() => navigate('profile')}
-                className="flex items-center space-x-3 p-2 rounded-lg hover:bg-white/10 transition-colors"
+                className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
               >
-                <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                  {user?.full_name?.charAt(0)?.toUpperCase() || 'U'}
+                <div className="w-8 h-8 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center text-white font-medium text-sm">
+                  {user?.full_name?.charAt(0).toUpperCase() || 'U'}
                 </div>
-                <span className="hidden md:block text-sm font-medium text-white">
-                  {user?.full_name || 'User'}
-                </span>
+                <span className="hidden sm:block font-medium">{user?.full_name}</span>
+              </button>
+              
+              <button
+                onClick={logout}
+                className="text-sm text-gray-300 hover:text-white transition-colors ml-4"
+              >
+                Sign Out
               </button>
             </div>
-
-            {/* Logout */}
-            <button
-              onClick={logout}
-              className="text-sm font-medium text-gray-300 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/10"
-            >
-              Logout
-            </button>
           </div>
         </div>
       </div>
@@ -201,71 +201,71 @@ const AppContent: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <div className="glass-card rounded-xl p-8 max-w-md">
-            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-white mb-2">OnCall AI</h2>
-            <p className="text-gray-400">Loading...</p>
-          </div>
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white">Loading OnCall AI...</p>
         </div>
       </div>
     );
   }
 
-  // Show landing page if not authenticated and not on auth page
-  if (!isAuthenticated) {
-    if (currentPage === 'auth') {
-      return <AuthPages />;
-    }
-    return <LandingPage onNavigateToAuth={() => navigate('auth')} />;
+  // OAuth Callback - Always show regardless of auth state
+  if (currentPage === 'oauth-callback') {
+    return <OAuthCallback />;
   }
 
-  // Main app with navigation
-  return (
-    <div className="min-h-screen bg-slate-900">
-      <NavigationHeader />
-      <main>
-        {currentPage === 'landing' && <LandingPage onNavigateToAuth={() => navigate('auth')} />}
-        {currentPage === 'auth' && <AuthPages />}
-        {currentPage === 'dashboard' && <Dashboard onNavigateToIncident={(id) => navigate('incident-detail', id)} />}
-        {currentPage === 'teams' && <TeamsManagement />}
-        {currentPage === 'settings' && <SettingsPage />}
-        {currentPage === 'profile' && <UserProfile />}
-        {currentPage === 'notifications' && <NotificationSettings />}
-        {currentPage === 'incident-detail' && currentIncidentId && (
-          <IncidentDetail 
-            incidentId={currentIncidentId} 
-            onBack={() => navigate('dashboard')} 
+  // Authenticated routes
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-900">
+        <NavigationHeader />
+        
+        <main className="relative">
+          {currentPage === 'dashboard' && (
+            <Dashboard onNavigateToIncident={(id) => navigate('incident-detail', id)} />
+          )}
+          {currentPage === 'teams' && <TeamsManagement />}
+          {currentPage === 'settings' && <SettingsPage />}
+          {currentPage === 'profile' && <UserProfile />}
+          {currentPage === 'notifications' && <NotificationSettings />}
+          {currentPage === 'incident-detail' && currentIncidentId && (
+            <IncidentDetail 
+              incidentId={currentIncidentId}
+              onBack={() => navigate('dashboard')}
+            />
+          )}
+        </main>
+
+        {/* Notification Center */}
+        {showNotificationCenter && (
+          <NotificationCenter
+            isOpen={showNotificationCenter}
+            onClose={() => setShowNotificationCenter(false)}
           />
         )}
-      </main>
 
-      {/* Toast Notifications - Always visible when authenticated */}
-      <ToastNotifications />
+        {/* Toast Notifications */}
+        <ToastNotifications />
+      </div>
+    );
+  }
 
-      {/* Notification Center Panel */}
-      <NotificationCenter 
-        isOpen={showNotificationCenter}
-        onClose={() => setShowNotificationCenter(false)}
-      />
-    </div>
-  );
+  // Unauthenticated routes
+  if (currentPage === 'auth') {
+    return <AuthPages onNavigateToLanding={() => navigate('landing')} />;
+  }
+
+  // Default to landing page
+  return <LandingPage onNavigateToAuth={() => navigate('auth')} />;
 };
 
-function App() {
+const App: React.FC = () => {
   return (
     <AuthProvider>
       <NotificationProvider>
-        <div className="App">
-          <AppContent />
-        </div>
+        <AppContent />
       </NotificationProvider>
     </AuthProvider>
   );
-}
+};
 
 export default App;

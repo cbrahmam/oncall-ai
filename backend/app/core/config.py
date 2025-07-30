@@ -1,16 +1,20 @@
-# backend/app/core/config.py - Fixed with extra fields allowed
+# backend/app/core/config.py - Enhanced with OAuth and Security
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from typing import List, Optional
 import os
 
 class Settings(BaseSettings):
-    """Application settings with enhanced security configuration"""
+    """Application settings with enhanced security and OAuth configuration"""
+    
+    # App Info
+    APP_NAME: str = Field(default="OnCall AI")
+    VERSION: str = Field(default="2.0.0")
+    DEBUG: bool = Field(default=True)
+    ENVIRONMENT: str = Field(default="development")
     
     # Database
     DATABASE_URL: str = Field(default="postgresql://admin:password@localhost:5432/oncall_ai")
-    
-    # Redis
     REDIS_URL: str = Field(default="redis://localhost:6379")
     
     # JWT Settings (Enhanced Security)
@@ -19,7 +23,19 @@ class Settings(BaseSettings):
     JWT_KEY_ID: str = Field(default="oncall-ai-9f69367c")
     ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15)
+    ACCESS_TOKEN_EXPIRE_DAYS: int = Field(default=7)  # For backward compatibility
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=30)
+    
+    # Frontend URL for OAuth redirects
+    FRONTEND_URL: str = Field(default="http://localhost:3000")
+    
+    # OAuth2 Provider Credentials
+    GOOGLE_CLIENT_ID: Optional[str] = Field(default=None)
+    GOOGLE_CLIENT_SECRET: Optional[str] = Field(default=None)
+    MICROSOFT_CLIENT_ID: Optional[str] = Field(default=None)
+    MICROSOFT_CLIENT_SECRET: Optional[str] = Field(default=None)
+    GITHUB_CLIENT_ID: Optional[str] = Field(default=None)
+    GITHUB_CLIENT_SECRET: Optional[str] = Field(default=None)
     
     # Rate Limiting
     GLOBAL_RATE_LIMIT: int = Field(default=1000)
@@ -33,7 +49,11 @@ class Settings(BaseSettings):
     ENABLE_GDPR_FEATURES: bool = Field(default=True)
     
     # CORS and Security Headers
-    CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000", "https://app.oncall-ai.com"])
+    CORS_ORIGINS: List[str] = Field(default=[
+        "http://localhost:3000", 
+        "http://localhost:5173",
+        "https://app.oncall-ai.com"
+    ])
     ALLOWED_HOSTS: List[str] = Field(default=["localhost", "*.oncall-ai.com"])
     
     # Session Security
@@ -45,54 +65,71 @@ class Settings(BaseSettings):
     DATA_RETENTION_DAYS: int = Field(default=2555)  # 7 years
     ANONYMIZATION_ENABLED: bool = Field(default=True)
     
-    # OAuth2 Providers (Optional)
-    GOOGLE_CLIENT_ID: Optional[str] = Field(default=None)
-    GOOGLE_CLIENT_SECRET: Optional[str] = Field(default=None)
-    MICROSOFT_CLIENT_ID: Optional[str] = Field(default=None)
-    MICROSOFT_CLIENT_SECRET: Optional[str] = Field(default=None)
-    GITHUB_CLIENT_ID: Optional[str] = Field(default=None)
-    GITHUB_CLIENT_SECRET: Optional[str] = Field(default=None)
-    
     # Security Monitoring
     SECURITY_EMAIL: str = Field(default="security@oncall-ai.com")
     SLACK_SECURITY_WEBHOOK: Optional[str] = Field(default=None)
     
     # External APIs
     OPENAI_API_KEY: Optional[str] = Field(default=None)
+    
+    # Communication Services
     TWILIO_ACCOUNT_SID: Optional[str] = Field(default=None)
     TWILIO_AUTH_TOKEN: Optional[str] = Field(default=None)
-    TWILIO_PHONE_NUMBER: Optional[str] = Field(default=None)  # Add missing field
-    SENDGRID_API_KEY: Optional[str] = Field(default=None)
+    TWILIO_PHONE_NUMBER: Optional[str] = Field(default=None)
+    
     SLACK_BOT_TOKEN: Optional[str] = Field(default=None)
-    SLACK_SIGNING_SECRET: Optional[str] = Field(default=None)  # Add missing field
-    FROM_EMAIL: Optional[str] = Field(default=None)  # Add missing field
-    WEBHOOK_SECRET: Optional[str] = Field(default=None)  # Add missing field
+    SLACK_SIGNING_SECRET: Optional[str] = Field(default=None)
     
-    # Application
-    DEBUG: bool = Field(default=True)
-    ENVIRONMENT: str = Field(default="development")
+    SENDGRID_API_KEY: Optional[str] = Field(default=None)
+    FROM_EMAIL: str = Field(default="alerts@oncall-ai.com")
     
-    # For backward compatibility with existing code
-    ACCESS_TOKEN_EXPIRE_DAYS: int = Field(default=7)  # Old setting
+    # Webhook Security
+    WEBHOOK_SECRET: str = Field(default="your-webhook-secret-key")
     
     class Config:
         env_file = ".env"
         case_sensitive = True
-        # IMPORTANT: Allow extra fields from .env file
+        # Allow extra fields from .env file
         extra = "allow"
 
 # Create settings instance
 settings = Settings()
 
-# Helper function for database connection
+# Helper functions
 def get_database_url() -> str:
     """Get database URL for SQLAlchemy"""
     return settings.DATABASE_URL
 
-# Helper function for Redis connection
 def get_redis_url() -> str:
     """Get Redis URL"""
     return settings.REDIS_URL
+
+def get_oauth_providers() -> dict:
+    """Get enabled OAuth providers"""
+    providers = {}
+    
+    if settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET:
+        providers['google'] = {
+            'client_id': settings.GOOGLE_CLIENT_ID,
+            'client_secret': settings.GOOGLE_CLIENT_SECRET,
+            'enabled': True
+        }
+    
+    if settings.MICROSOFT_CLIENT_ID and settings.MICROSOFT_CLIENT_SECRET:
+        providers['microsoft'] = {
+            'client_id': settings.MICROSOFT_CLIENT_ID,
+            'client_secret': settings.MICROSOFT_CLIENT_SECRET,
+            'enabled': True
+        }
+    
+    if settings.GITHUB_CLIENT_ID and settings.GITHUB_CLIENT_SECRET:
+        providers['github'] = {
+            'client_id': settings.GITHUB_CLIENT_ID,
+            'client_secret': settings.GITHUB_CLIENT_SECRET,
+            'enabled': True
+        }
+    
+    return providers
 
 # Validate critical settings on import
 def validate_security_settings():
@@ -103,6 +140,13 @@ def validate_security_settings():
         value = getattr(settings, setting, None)
         if not value or len(value) < 32:
             print(f"⚠️  Warning: {setting} should be at least 32 characters long")
+    
+    # Check OAuth configuration
+    oauth_providers = get_oauth_providers()
+    if oauth_providers:
+        print(f"✅ OAuth providers enabled: {', '.join(oauth_providers.keys())}")
+    else:
+        print("⚠️  No OAuth providers configured")
     
     print("✅ Security settings validated")
 

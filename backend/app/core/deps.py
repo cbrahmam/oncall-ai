@@ -1,7 +1,8 @@
+# backend/app/core/deps.py - FIXED VERSION
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
+from sqlalchemy import select
 from app.database import get_db
 from app.models.user import User
 from app.models.organization import Organization
@@ -32,23 +33,17 @@ async def get_current_user(
             detail="Invalid token payload"
         )
     
-    # Get user from database
+    # FIXED: Use proper SQLAlchemy ORM query instead of raw SQL
     result = await db.execute(
-        text("SELECT * FROM users WHERE id = :user_id AND is_active = true"),
-        {"user_id": user_id}
+        select(User).where(User.id == user_id, User.is_active == True)
     )
-    user_data = result.fetchone()
+    user = result.scalar_one_or_none()
     
-    if not user_data:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive"
         )
-    
-    # Convert to User model (simplified)
-    user = User()
-    for key, value in user_data._mapping.items():
-        setattr(user, key, value)
     
     return user
 
@@ -58,21 +53,19 @@ async def get_current_organization(
 ) -> Organization:
     """Get current user's organization"""
     
+    # FIXED: Use proper SQLAlchemy ORM query instead of raw SQL
     result = await db.execute(
-        text("SELECT * FROM organizations WHERE id = :org_id AND is_active = true"),
-        {"org_id": str(current_user.organization_id)}
+        select(Organization).where(
+            Organization.id == current_user.organization_id, 
+            Organization.is_active == True
+        )
     )
-    org_data = result.fetchone()
+    organization = result.scalar_one_or_none()
     
-    if not org_data:
+    if not organization:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Organization not found"
         )
     
-    # Convert to Organization model
-    org = Organization()
-    for key, value in org_data._mapping.items():
-        setattr(org, key, value)
-    
-    return org
+    return organization
