@@ -5,7 +5,7 @@ from sqlalchemy import pool
 from alembic import context
 import os
 import sys
-
+from app.models.oauth_account import OAuthAccount
 # Add the backend directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

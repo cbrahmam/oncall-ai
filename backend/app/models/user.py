@@ -4,7 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 from app.database import Base
-from app.models.team import team_members  # Add this import
+from app.models.team import team_members
 
 class User(Base):
     __tablename__ = "users"
@@ -14,7 +14,7 @@ class User(Base):
     
     # Basic info
     email = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)  # Allow NULL for OAuth-only users
     full_name = Column(String(255), nullable=False)
     
     # Role and permissions
@@ -47,8 +47,9 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_login_at = Column(DateTime(timezone=True))
     
-    # Relationships - FIXED with explicit foreign_keys
+    # Relationships - FIXED with OAuth support
     organization = relationship("Organization", back_populates="users")
+    oauth_accounts = relationship("OAuthAccount", back_populates="user", cascade="all, delete-orphan")
     
     # Fixed relationships with explicit foreign keys
     runbooks = relationship("Runbook", back_populates="created_by", foreign_keys="Runbook.created_by_id")

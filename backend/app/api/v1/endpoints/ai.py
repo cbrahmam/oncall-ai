@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, List, Optional
-
+from app.core.config import settings
 from app.database import get_async_session
 from app.core.security import get_current_user
 from app.models.user import User
@@ -523,4 +523,36 @@ def _extract_services(alert_data: Dict) -> List[str]:
             if "service:" in str(tag):
                 services.append(str(tag).split("service:")[-1])
     
-    return list(set(services))[:5]  # Limit to 5 services
+    return list(set(services))[:5]  # Limit to 5 services.
+@router.get("/providers/status")
+async def get_ai_providers_status(
+    current_user: User = Depends(get_current_user)
+):
+    """Get status of all AI providers"""
+    
+    providers = [
+        {
+            "provider": "openai",
+            "name": "OpenAI GPT-4",
+            "available": True,
+            "api_key_configured": bool(settings.OPENAI_API_KEY),
+            "status": "active" if settings.OPENAI_API_KEY else "not_configured",
+            "requests_today": 0,
+            "rate_limit_remaining": 1000
+        },
+        {
+            "provider": "claude",
+            "name": "Anthropic Claude",
+            "available": False,
+            "api_key_configured": False,
+            "status": "not_configured",
+            "requests_today": 0,
+            "rate_limit_remaining": 0
+        }
+    ]
+    
+    return {
+        "providers": providers,
+        "total_providers": len(providers),
+        "active_providers": len([p for p in providers if p["available"]])
+    }

@@ -1,7 +1,8 @@
-# backend/app/api/v1/endpoints/oauth.py
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+# backend/app/api/v1/endpoints/oauth.py - FIXED VERSION
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 from app.database import get_async_session
 from app.models.user import User
 from app.models.organization import Organization
@@ -13,7 +14,7 @@ from app.core.config import settings
 import uuid
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 import redis.asyncio as redis
 
 router = APIRouter()
@@ -21,7 +22,7 @@ router = APIRouter()
 # Redis client for storing OAuth state
 redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
 
-@router.get("/providers", response_model=AvailableOAuthProviders)
+@router.get("/providers")
 async def get_oauth_providers():
     """Get list of available OAuth providers"""
     providers = []
@@ -32,20 +33,21 @@ async def get_oauth_providers():
                 "name": provider_key,
                 "display_name": config["name"],
                 "enabled": True,
-                "icon_url": f"/static/icons/{provider_key}.svg",  # You'll need to add these
+                "icon_url": f"/static/icons/{provider_key}.svg",
                 "description": f"Sign in with {config['name']}"
             })
     
-    return AvailableOAuthProviders(providers=providers)
+    return {"providers": providers}
 
-@router.post("/authorize", response_model=OAuthAuthorizationResponse)
-async def start_oauth_authorization(request: OAuthAuthorizationRequest):
+@router.post("/authorize")
+async def start_oauth_authorization(request: dict):
     """Start OAuth authorization flow"""
     
-    if request.provider.value not in OAUTH_PROVIDERS:
+    provider = request.get("provider")
+    if provider not in OAUTH_PROVIDERS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"OAuth provider '{request.provider.value}' is not supported"
+            detail=f"OAuth provider '{provider}' is not supported"
         )
     
     # Generate secure state parameter
@@ -55,24 +57,24 @@ async def start_oauth_authorization(request: OAuthAuthorizationRequest):
     await redis_client.setex(
         f"oauth_state:{state}",
         600,  # 10 minutes
-        request.provider.value
+        provider
     )
     
     # Default redirect URI
-    redirect_uri = request.redirect_uri or f"{settings.FRONTEND_URL}/auth/oauth/callback"
+    redirect_uri = request.get("redirect_uri") or f"{settings.FRONTEND_URL}/auth/oauth/callback"
     
     try:
         authorization_url = OAuthService.get_authorization_url(
-            provider=request.provider.value,
+            provider=provider,
             redirect_uri=redirect_uri,
             state=state
         )
         
-        return OAuthAuthorizationResponse(
-            authorization_url=authorization_url,
-            state=state,
-            provider=request.provider
-        )
+        return {
+            "authorization_url": authorization_url,
+            "state": state,
+            "provider": provider
+        }
         
     except Exception as e:
         raise HTTPException(
@@ -80,37 +82,41 @@ async def start_oauth_authorization(request: OAuthAuthorizationRequest):
             detail=f"Failed to generate authorization URL: {str(e)}"
         )
 
-@router.post("/callback", response_model=OAuthLoginResponse)
+@router.post("/callback")
 async def oauth_callback(
-    request: OAuthCallbackRequest,
+    request: dict,
     db: AsyncSession = Depends(get_async_session)
 ):
     """Handle OAuth callback and complete login/registration"""
     
+    provider = request.get("provider")
+    code = request.get("code")
+    state = request.get("state")
+    
     # Verify state parameter
-    if request.state:
-        stored_provider = await redis_client.get(f"oauth_state:{request.state}")
-        if not stored_provider or stored_provider != request.provider.value:
+    if state:
+        stored_provider = await redis_client.get(f"oauth_state:{state}")
+        if not stored_provider or stored_provider != provider:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid state parameter"
             )
         # Clean up state
-        await redis_client.delete(f"oauth_state:{request.state}")
+        await redis_client.delete(f"oauth_state:{state}")
     
-    redirect_uri = request.redirect_uri or f"{settings.FRONTEND_URL}/auth/oauth/callback"
+    redirect_uri = request.get("redirect_uri") or f"{settings.FRONTEND_URL}/auth/oauth/callback"
     
     try:
         # Exchange code for token
         token_data = await OAuthService.exchange_code_for_token(
-            provider=request.provider.value,
-            code=request.code,
+            provider=provider,
+            code=code,
             redirect_uri=redirect_uri
         )
         
         # Get user info from provider
         user_info = await OAuthService.get_user_info(
-            provider=request.provider.value,
+            provider=provider,
             access_token=token_data["access_token"]
         )
         
@@ -124,7 +130,7 @@ async def oauth_callback(
         oauth_account_result = await db.execute(
             select(OAuthAccount).where(
                 and_(
-                    OAuthAccount.provider == request.provider,
+                    OAuthAccount.provider == provider,
                     OAuthAccount.provider_user_id == user_info["id"]
                 )
             ).options(selectinload(OAuthAccount.user))
@@ -146,13 +152,12 @@ async def oauth_callback(
             # Update OAuth account info
             oauth_account.access_token = token_data["access_token"]
             oauth_account.refresh_token = token_data.get("refresh_token")
-            oauth_account.provider_email = user_info["email"]
-            oauth_account.provider_name = user_info["name"]
-            oauth_account.provider_avatar = user_info["avatar"]
-            oauth_account.last_used_at = datetime.utcnow()
+            oauth_account.email = user_info["email"]
+            oauth_account.name = user_info["name"]
+            oauth_account.avatar_url = user_info.get("avatar")
             
             if "expires_in" in token_data:
-                oauth_account.token_expires_at = datetime.utcnow() + timedelta(seconds=token_data["expires_in"])
+                oauth_account.expires_at = datetime.utcnow() + timedelta(seconds=token_data["expires_in"])
             
         else:
             # Check if user exists with this email
@@ -166,21 +171,17 @@ async def oauth_callback(
                 oauth_account = OAuthAccount(
                     id=uuid.uuid4(),
                     user_id=user.id,
-                    provider=request.provider,
+                    provider=provider,
                     provider_user_id=user_info["id"],
-                    provider_username=user_info.get("username"),
-                    provider_email=user_info["email"],
-                    provider_name=user_info["name"],
-                    provider_avatar=user_info["avatar"],
+                    email=user_info["email"],
+                    name=user_info["name"],
+                    avatar_url=user_info.get("avatar"),
                     access_token=token_data["access_token"],
-                    refresh_token=token_data.get("refresh_token"),
-                    provider_data=user_info["raw_data"],
-                    is_active=True,
-                    last_used_at=datetime.utcnow()
+                    refresh_token=token_data.get("refresh_token")
                 )
                 
                 if "expires_in" in token_data:
-                    oauth_account.token_expires_at = datetime.utcnow() + timedelta(seconds=token_data["expires_in"])
+                    oauth_account.expires_at = datetime.utcnow() + timedelta(seconds=token_data["expires_in"])
                 
                 db.add(oauth_account)
             
@@ -188,11 +189,10 @@ async def oauth_callback(
                 # New user - create user and OAuth account
                 is_new_user = True
                 
-                # Create organization (or you might want different logic here)
+                # Create organization
                 organization = Organization(
                     id=uuid.uuid4(),
-                    name=f"{user_info['name']}'s Organization",
-                    is_active=True
+                    name=f"{user_info['name']}'s Organization"
                 )
                 db.add(organization)
                 await db.flush()
@@ -203,10 +203,10 @@ async def oauth_callback(
                     organization_id=organization.id,
                     email=user_info["email"],
                     full_name=user_info["name"] or user_info["email"].split("@")[0],
-                    role="admin",  # First user in org is admin
+                    role="admin",
                     is_active=True,
-                    is_verified=True,  # OAuth users are considered verified
-                    password_hash=None  # No password for OAuth-only users
+                    is_verified=True,
+                    password_hash=None
                 )
                 db.add(user)
                 await db.flush()
@@ -215,22 +215,17 @@ async def oauth_callback(
                 oauth_account = OAuthAccount(
                     id=uuid.uuid4(),
                     user_id=user.id,
-                    provider=request.provider,
+                    provider=provider,
                     provider_user_id=user_info["id"],
-                    provider_username=user_info.get("username"),
-                    provider_email=user_info["email"],
-                    provider_name=user_info["name"],
-                    provider_avatar=user_info["avatar"],
+                    email=user_info["email"],
+                    name=user_info["name"],
+                    avatar_url=user_info.get("avatar"),
                     access_token=token_data["access_token"],
-                    refresh_token=token_data.get("refresh_token"),
-                    provider_data=user_info["raw_data"],
-                    is_active=True,
-                    is_primary=True,  # First OAuth account is primary
-                    last_used_at=datetime.utcnow()
+                    refresh_token=token_data.get("refresh_token")
                 )
                 
                 if "expires_in" in token_data:
-                    oauth_account.token_expires_at = datetime.utcnow() + timedelta(seconds=token_data["expires_in"])
+                    oauth_account.expires_at = datetime.utcnow() + timedelta(seconds=token_data["expires_in"])
                 
                 db.add(oauth_account)
         
@@ -252,26 +247,11 @@ async def oauth_callback(
             data={"sub": str(user.id), "org_id": str(user.organization_id)}
         )
         
-        # Prepare OAuth account info
-        oauth_account_info = OAuthAccountInfo(
-            id=str(oauth_account.id),
-            provider=oauth_account.provider,
-            provider_user_id=oauth_account.provider_user_id,
-            provider_email=oauth_account.provider_email,
-            provider_name=oauth_account.provider_name,
-            provider_username=oauth_account.provider_username,
-            provider_avatar=oauth_account.provider_avatar,
-            is_active=oauth_account.is_active,
-            is_primary=oauth_account.is_primary,
-            created_at=oauth_account.created_at,
-            last_used_at=oauth_account.last_used_at
-        )
-        
-        return OAuthLoginResponse(
-            access_token=access_token,
-            token_type="bearer",
-            expires_in=settings.ACCESS_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-            user={
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": settings.ACCESS_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+            "user": {
                 "id": str(user.id),
                 "email": user.email,
                 "full_name": user.full_name,
@@ -279,9 +259,17 @@ async def oauth_callback(
                 "organization_id": str(user.organization_id),
                 "organization_name": organization.name if organization else None
             },
-            oauth_account=oauth_account_info,
-            is_new_user=is_new_user
-        )
+            "oauth_account": {
+                "id": str(oauth_account.id),
+                "provider": oauth_account.provider,
+                "provider_user_id": oauth_account.provider_user_id,
+                "email": oauth_account.email,
+                "name": oauth_account.name,
+                "avatar_url": oauth_account.avatar_url,
+                "created_at": oauth_account.created_at.isoformat() if oauth_account.created_at else None
+            },
+            "is_new_user": is_new_user
+        }
         
     except HTTPException:
         raise
@@ -292,169 +280,7 @@ async def oauth_callback(
             detail=f"OAuth login failed: {str(e)}"
         )
 
-@router.post("/link", response_model=OAuthLinkResponse)
-async def link_oauth_account(
-    request: OAuthLinkRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Link OAuth account to current authenticated user"""
-    
-    # Verify state if provided
-    if request.state:
-        stored_provider = await redis_client.get(f"oauth_state:{request.state}")
-        if stored_provider:
-            await redis_client.delete(f"oauth_state:{request.state}")
-    
-    redirect_uri = f"{settings.FRONTEND_URL}/auth/oauth/callback"
-    
-    try:
-        # Exchange code for token
-        token_data = await OAuthService.exchange_code_for_token(
-            provider=request.provider.value,
-            code=request.code,
-            redirect_uri=redirect_uri
-        )
-        
-        # Get user info from provider
-        user_info = await OAuthService.get_user_info(
-            provider=request.provider.value,
-            access_token=token_data["access_token"]
-        )
-        
-        # Check if this OAuth account is already linked to another user
-        existing_oauth_result = await db.execute(
-            select(OAuthAccount).where(
-                and_(
-                    OAuthAccount.provider == request.provider,
-                    OAuthAccount.provider_user_id == user_info["id"]
-                )
-            )
-        )
-        existing_oauth = existing_oauth_result.scalar_one_or_none()
-        
-        if existing_oauth:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"This {request.provider.value} account is already linked to another user"
-            )
-        
-        # Check if user already has this provider linked
-        user_oauth_result = await db.execute(
-            select(OAuthAccount).where(
-                and_(
-                    OAuthAccount.user_id == current_user.id,
-                    OAuthAccount.provider == request.provider
-                )
-            )
-        )
-        user_existing_oauth = user_oauth_result.scalar_one_or_none()
-        
-        if user_existing_oauth:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"You already have a {request.provider.value} account linked"
-            )
-        
-        # Create new OAuth account link
-        oauth_account = OAuthAccount(
-            id=uuid.uuid4(),
-            user_id=current_user.id,
-            provider=request.provider,
-            provider_user_id=user_info["id"],
-            provider_username=user_info.get("username"),
-            provider_email=user_info["email"],
-            provider_name=user_info["name"],
-            provider_avatar=user_info["avatar"],
-            access_token=token_data["access_token"],
-            refresh_token=token_data.get("refresh_token"),
-            provider_data=user_info["raw_data"],
-            is_active=True,
-            last_used_at=datetime.utcnow()
-        )
-        
-        if "expires_in" in token_data:
-            oauth_account.token_expires_at = datetime.utcnow() + timedelta(seconds=token_data["expires_in"])
-        
-        db.add(oauth_account)
-        await db.commit()
-        await db.refresh(oauth_account)
-        
-        oauth_account_info = OAuthAccountInfo(
-            id=str(oauth_account.id),
-            provider=oauth_account.provider,
-            provider_user_id=oauth_account.provider_user_id,
-            provider_email=oauth_account.provider_email,
-            provider_name=oauth_account.provider_name,
-            provider_username=oauth_account.provider_username,
-            provider_avatar=oauth_account.provider_avatar,
-            is_active=oauth_account.is_active,
-            is_primary=oauth_account.is_primary,
-            created_at=oauth_account.created_at,
-            last_used_at=oauth_account.last_used_at
-        )
-        
-        return OAuthLinkResponse(oauth_account=oauth_account_info)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to link OAuth account: {str(e)}"
-        )
-
-@router.delete("/unlink", response_model=OAuthUnlinkResponse)
-async def unlink_oauth_account(
-    request: OAuthUnlinkRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Unlink OAuth account from current user"""
-    
-    # Find the OAuth account to unlink
-    oauth_result = await db.execute(
-        select(OAuthAccount).where(
-            and_(
-                OAuthAccount.user_id == current_user.id,
-                OAuthAccount.provider == request.provider
-            )
-        )
-    )
-    oauth_account = oauth_result.scalar_one_or_none()
-    
-    if not oauth_account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No {request.provider.value} account linked to your profile"
-        )
-    
-    # Check if user has a password or other OAuth accounts before unlinking
-    other_oauth_result = await db.execute(
-        select(OAuthAccount).where(
-            and_(
-                OAuthAccount.user_id == current_user.id,
-                OAuthAccount.provider != request.provider,
-                OAuthAccount.is_active == True
-            )
-        )
-    )
-    other_oauth_accounts = other_oauth_result.scalars().all()
-    
-    if not current_user.password_hash and len(other_oauth_accounts) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot unlink the last authentication method. Please set a password first or link another OAuth account."
-        )
-    
-    # Delete the OAuth account
-    await db.delete(oauth_account)
-    await db.commit()
-    
-    return OAuthUnlinkResponse(provider=request.provider)
-
-@router.get("/accounts", response_model=List[OAuthAccountInfo])
+@router.get("/accounts")
 async def get_linked_oauth_accounts(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
@@ -463,65 +289,62 @@ async def get_linked_oauth_accounts(
     
     oauth_result = await db.execute(
         select(OAuthAccount).where(
-            and_(
-                OAuthAccount.user_id == current_user.id,
-                OAuthAccount.is_active == True
-            )
+            OAuthAccount.user_id == current_user.id
         ).order_by(OAuthAccount.created_at)
     )
     oauth_accounts = oauth_result.scalars().all()
     
     return [
-        OAuthAccountInfo(
-            id=str(account.id),
-            provider=account.provider,
-            provider_user_id=account.provider_user_id,
-            provider_email=account.provider_email,
-            provider_name=account.provider_name,
-            provider_username=account.provider_username,
-            provider_avatar=account.provider_avatar,
-            is_active=account.is_active,
-            is_primary=account.is_primary,
-            created_at=account.created_at,
-            last_used_at=account.last_used_at
-        )
+        {
+            "id": str(account.id),
+            "provider": account.provider,
+            "provider_user_id": account.provider_user_id,
+            "email": account.email,
+            "name": account.name,
+            "avatar_url": account.avatar_url,
+            "created_at": account.created_at.isoformat() if account.created_at else None
+        }
         for account in oauth_accounts
     ]
 
-@router.post("/refresh-token")
-async def refresh_oauth_token(
-    provider: OAuthProvider,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
+@router.get("/authorize/{provider}")
+async def get_oauth_authorization_url(
+    provider: str,
+    redirect_uri: str = Query(default="http://localhost:3000/auth/oauth/callback")
 ):
-    """Refresh OAuth access token using refresh token"""
+    """Get OAuth authorization URL - GET endpoint for easy testing"""
     
-    # Find the OAuth account
-    oauth_result = await db.execute(
-        select(OAuthAccount).where(
-            and_(
-                OAuthAccount.user_id == current_user.id,
-                OAuthAccount.provider == provider
-            )
-        )
-    )
-    oauth_account = oauth_result.scalar_one_or_none()
-    
-    if not oauth_account or not oauth_account.refresh_token:
+    if provider not in OAUTH_PROVIDERS:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="OAuth account not found or no refresh token available"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"OAuth provider '{provider}' is not supported"
         )
+    
+    # Generate secure state parameter
+    state = secrets.token_urlsafe(32)
+    
+    # Store state in Redis with 10-minute expiration
+    await redis_client.setex(
+        f"oauth_state:{state}",
+        600,  # 10 minutes
+        provider
+    )
     
     try:
-        # Refresh the token using the OAuth service
-        # This would depend on the specific provider's refresh token flow
-        # For now, return success message
+        authorization_url = OAuthService.get_authorization_url(
+            provider=provider,
+            redirect_uri=redirect_uri,
+            state=state
+        )
         
-        return {"message": "Token refresh functionality not implemented yet"}
+        return {
+            "authorization_url": authorization_url,
+            "state": state,
+            "provider": provider
+        }
         
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to refresh OAuth token: {str(e)}"
+            detail=f"Failed to generate authorization URL: {str(e)}"
         )
