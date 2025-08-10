@@ -1,7 +1,7 @@
 // frontend/src/services/authService.js
 class AuthService {
   constructor() {
-    this.baseURL = 'http://localhost:8000/api/v1';
+    this.baseURL = 'http://192.168.68.108:8000/api/v1';
     this.tokenRefreshPromise = null;
     this.setupInterceptors();
   }

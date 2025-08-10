@@ -58,7 +58,7 @@ if [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ]; then
     
     # Test 7: Get Current User OAuth Accounts
     echo -e "\n7️⃣ User OAuth Accounts:"
-    curl -s -X GET "$BASE_URL/api/v1/oauth/accounts" \
+    curl -s -X GET "$BASE_URL/api/v1/oauth/accounts" \no
          -H "Authorization: Bearer $TOKEN" | jq '.'
     
     # Test 8: Health Check

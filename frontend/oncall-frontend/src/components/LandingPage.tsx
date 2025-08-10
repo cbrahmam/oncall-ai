@@ -80,7 +80,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToAuth }) => {
       role: "VP Engineering, TechCorp",
       company: "TechCorp",
       image: "👩‍💻",
-      quote: "OnCall AI reduced our MTTR by 73% and eliminated alert fatigue. It's like having a senior SRE working 24/7.",
+      quote: "OffCall AI reduced our MTTR by 73% and eliminated alert fatigue. It's like having a senior SRE working 24/7.",
       rating: 5
     },
     {
@@ -156,7 +156,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToAuth }) => {
     { label: "Average MTTR Reduction", value: "73%", icon: "⚡" },
     { label: "Alert Noise Reduction", value: "89%", icon: "🔕" },
     { label: "Customer Satisfaction", value: "4.9/5", icon: "⭐" },
-    { label: "Enterprise Clients", value: "500+", icon: "🏢" }
+    { label: "Enterprise Clients", value: "1000+", icon: "🏢" }
   ];
 
   return (
@@ -169,7 +169,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToAuth }) => {
               <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                 <BoltIcon className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold text-white">OnCall AI</span>
+              <span className="text-xl font-bold text-white">OffCall AI</span>
             </div>
             
             <div className="hidden md:flex items-center space-x-8">
@@ -222,7 +222,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToAuth }) => {
             </h1>
             
             <p className="text-xl lg:text-2xl text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed">
-              OnCall AI transforms chaos into clarity with intelligent incident response. 
+              OffCall AI transforms chaos into clarity with intelligent incident response. 
               Reduce alert fatigue by 89% and cut MTTR by 73% with AI that thinks like your best SRE.
             </p>
 
@@ -295,7 +295,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToAuth }) => {
               Loved by Teams
               <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent"> Worldwide</span>
             </h2>
-            <p className="text-xl text-gray-300">See how OnCall AI transformed incident response for these companies</p>
+            <p className="text-xl text-gray-300">See how OffCall AI transformed incident response for these companies</p>
           </div>
 
           <div className="relative max-w-4xl mx-auto">
@@ -407,7 +407,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToAuth }) => {
               <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent"> Incident Response?</span>
             </h2>
             <p className="text-xl text-gray-300 mb-8">
-              Join 500+ companies already using OnCall AI to eliminate alert fatigue and reduce MTTR
+              Join 1000+ companies already using OffCall AI to eliminate alert fatigue and reduce MTTR
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
               <button 
@@ -430,10 +430,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToAuth }) => {
               <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                 <BoltIcon className="w-5 h-5 text-white" />
               </div>
-              <span className="text-lg font-bold text-white">OnCall AI</span>
+              <span className="text-lg font-bold text-white">OffCall AI</span>
             </div>
             <div className="text-gray-400 text-sm">
-              © 2024 OnCall AI. All rights reserved.
+              © 2025 OffCall AI. All rights reserved.
             </div>
           </div>
         </div>

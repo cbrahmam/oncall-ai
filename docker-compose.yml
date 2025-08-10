@@ -4,7 +4,7 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_DB: oncall_ai
+      POSTGRES_DB: offcall_ai
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: password
       POSTGRES_HOST_AUTH_METHOD: trust
@@ -13,7 +13,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d oncall_ai"]
+      test: ["CMD-SHELL", "pg_isready -U admin -d offcall_ai"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,7 +35,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://admin:password@postgres:5432/oncall_ai
+      - DATABASE_URL=postgresql://admin:password@postgres:5432/offcall_ai
       - REDIS_URL=redis://redis:6379
     depends_on:
       postgres:

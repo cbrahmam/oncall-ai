@@ -1,4 +1,4 @@
-// src/services/apiService.ts - Complete API Service for OnCall AI Mobile App
+// src/services/apiService.ts - Complete API Service for OffCall AI Mobile App
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Types
@@ -260,7 +260,7 @@ class ApiService {
       {
         id: '4',
         title: 'SSL Certificate Expiring Soon',
-        description: 'SSL certificate for api.oncall-ai.com expires in 7 days.',
+        description: 'SSL certificate for api.offcall-ai.com expires in 7 days.',
         severity: 'low',
         status: 'open',
         source: 'ssl_monitor',

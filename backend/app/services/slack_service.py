@@ -114,7 +114,7 @@ class SlackService:
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"Incident ID: {incident.id} | OnCall AI"
+                        "text": f"Incident ID: {incident.id} | OffCall AI"
                     }
                 ]
             }

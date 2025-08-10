@@ -9,6 +9,9 @@ import {
 } from '@heroicons/react/24/outline';
 import { useNotifications } from '../contexts/NotificationContext';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+
+
 interface Comment {
   id: string;
   content: string;
@@ -50,7 +53,7 @@ const IncidentComments: React.FC<IncidentCommentsProps> = ({ incidentId }) => {
   const fetchComments = useCallback(async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:8000/api/v1/incidents/${incidentId}/comments`, {
+      const response = await fetch(`${API_BASE_URL}/incidents/${incidentId}/comments`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -156,7 +159,7 @@ const IncidentComments: React.FC<IncidentCommentsProps> = ({ incidentId }) => {
     
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:8000/api/v1/incidents/${incidentId}/comments`, {
+      const response = await fetch(`${API_BASE_URL}/incidents/${incidentId}/comments`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

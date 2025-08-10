@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { EyeIcon, EyeSlashIcon, BoltIcon } from '@heroicons/react/24/outline';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+
 interface LoginFormData {
   email: string;
   password: string;
@@ -39,7 +41,7 @@ const ModernLogin: React.FC<ModernLoginProps> = ({ onLogin, onSwitchToRegister }
     setError(null);
     
     try {
-      const response = await fetch('http://localhost:8000/api/v1/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +99,7 @@ const ModernLogin: React.FC<ModernLoginProps> = ({ onLogin, onSwitchToRegister }
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl mb-4 shadow-lg">
               <BoltIcon className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">OnCall AI</h1>
+            <h1 className="text-3xl font-bold text-white mb-2">OffCall AI</h1>
             <p className="text-blue-100">Sign in to your account</p>
           </div>
 

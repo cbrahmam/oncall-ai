@@ -10,7 +10,7 @@ from app.core.config import settings
 load_dotenv()
 
 # Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:password@localhost:5432/oncall_ai")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:password@localhost:5432/offcall_ai")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # Convert sync URL to async for SQLAlchemy

@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { 
+
   XMarkIcon, 
   ExclamationTriangleIcon, 
   FireIcon, 
   InformationCircleIcon,
   TagIcon
 } from '@heroicons/react/24/outline';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
 interface CreateIncidentModalProps {
   isOpen: boolean;
@@ -78,7 +81,7 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({
 
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('http://localhost:8000/api/v1/incidents/', {
+      const response = await fetch(`${API_BASE_URL}/incidents/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

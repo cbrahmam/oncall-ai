@@ -221,7 +221,7 @@ async def setup_mfa(
         # Create TOTP URI for QR code
         totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
             name=current_user.email,
-            issuer_name="OnCall AI"
+            issuer_name="OffCall AI"
         )
         
         # Generate QR code

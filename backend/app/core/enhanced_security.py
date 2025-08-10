@@ -1,6 +1,6 @@
 # backend/app/core/enhanced_security.py
 """
-Enterprise-grade security system for OnCall AI
+Enterprise-grade security system for OffCall AI
 Implements JWT hardening, MFA, rate limiting, and session management
 """
 
@@ -228,7 +228,7 @@ class MFAManager:
         totp = pyotp.TOTP(secret)
         provisioning_uri = totp.provisioning_uri(
             name=f"user_{user_id}",
-            issuer_name="OnCall AI"
+            issuer_name="OffCall AI"
         )
         
         qr = qrcode.QRCode(version=1, box_size=10, border=5)

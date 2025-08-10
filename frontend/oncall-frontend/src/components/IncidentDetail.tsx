@@ -20,6 +20,9 @@ import IncidentTimeline from './IncidentTimeline';
 import IncidentComments from './IncidentComments';
 import IncidentActions from './IncidentActions';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+
+
 interface IncidentDetailProps {
   incidentId: string;
   onBack: () => void;
@@ -51,7 +54,7 @@ const IncidentDetail: React.FC<IncidentDetailProps> = ({ incidentId, onBack }) =
   const fetchIncident = useCallback(async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:8000/api/v1/incidents/${incidentId}`, {
+      const response = await fetch(`${API_BASE_URL}/incidents/${incidentId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

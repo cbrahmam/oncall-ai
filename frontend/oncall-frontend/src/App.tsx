@@ -71,7 +71,7 @@ const AppContent: React.FC = () => {
       const timer = setTimeout(() => {
         showToast({
           type: 'system',
-          title: 'Welcome to OnCall AI! 🚀',
+          title: 'Welcome to OffCall AI! 🚀',
           message: 'Real-time notifications are now active. You\'ll receive instant alerts for incidents and system updates.',
           autoClose: true,
           duration: 8000
@@ -116,7 +116,7 @@ const AppContent: React.FC = () => {
               onClick={() => navigate('dashboard')}
               className="text-xl font-bold text-white hover:text-blue-400 transition-colors"
             >
-              OnCall AI
+              OffCall AI
             </button>
           </div>
 
@@ -202,7 +202,7 @@ const AppContent: React.FC = () => {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white">Loading OnCall AI...</p>
+          <p className="text-white">Loading OffCall AI...</p>
         </div>
       </div>
     );

@@ -24,7 +24,7 @@ Created: {incident.created_at.strftime('%H:%M')}
 
 View: http://localhost:3000/incidents/{incident.id}
 
-OnCall AI"""
+OffCall AI"""
 
             message = self.client.messages.create(
                 body=message_body,
@@ -52,7 +52,7 @@ URGENT ACTION REQUIRED
 
 View: http://localhost:3000/incidents/{incident.id}
 
-OnCall AI"""
+OffCall AI"""
 
             message = self.client.messages.create(
                 body=message_body,

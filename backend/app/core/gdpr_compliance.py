@@ -1,6 +1,6 @@
 # backend/app/core/gdpr_compliance.py
 """
-GDPR Compliance System for OnCall AI
+GDPR Compliance System for OffCall AI
 Implements data protection, privacy controls, and user rights management
 """
 

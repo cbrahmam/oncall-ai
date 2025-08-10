@@ -14,7 +14,11 @@ import {
   ArrowDownIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
+
 import CreateIncidentModal from './CreateIncidentModal';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+
 
 interface DashboardStats {
   total_incidents: number;
@@ -48,7 +52,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
       const token = localStorage.getItem('access_token');
       
       // Fetch incidents
-      const incidentsResponse = await fetch('http://localhost:8000/api/v1/incidents/', {
+      const incidentsResponse = await fetch(`${API_BASE_URL}/incidents/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

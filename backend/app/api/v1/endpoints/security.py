@@ -1,6 +1,6 @@
 # backend/app/api/v1/endpoints/security.py
 """
-Security API endpoints for OnCall AI
+Security API endpoints for OffCall AI
 MFA, rate limiting, GDPR, and advanced security features
 """
 

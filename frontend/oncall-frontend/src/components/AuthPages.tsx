@@ -1,13 +1,17 @@
 // frontend/src/components/AuthPages.tsx - Updated with SSO
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+
 import { 
+
   EyeIcon, 
   EyeSlashIcon, 
   ArrowRightIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
 interface AuthPagesProps {
   onNavigateToLanding?: () => void;
@@ -30,7 +34,7 @@ const AuthPages: React.FC<AuthPagesProps> = ({ onNavigateToLanding }) => {
   useEffect(() => {
     const fetchSsoProviders = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/oauth/providers');
+        const response = await fetch(`${API_BASE_URL}/oauth/providers`);
         if (response.ok) {
           const data = await response.json();
           setSsoProviders(data.providers);
@@ -69,7 +73,7 @@ const AuthPages: React.FC<AuthPagesProps> = ({ onNavigateToLanding }) => {
     setSsoLoading(true);
     try {
       // Start OAuth flow
-      const response = await fetch('http://localhost:8000/api/v1/oauth/authorize', {
+      const response = await fetch(`${API_BASE_URL}/oauth/authorize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -159,8 +163,8 @@ const AuthPages: React.FC<AuthPagesProps> = ({ onNavigateToLanding }) => {
           </h2>
           <p className="mt-2 text-gray-400">
             {isLoginMode 
-              ? 'Sign in to your OnCall AI account' 
-              : 'Create your OnCall AI account'
+              ? 'Sign in to your OffCall AI account' 
+              : 'Create your OffCall AI account'
             }
           </p>
         </div>

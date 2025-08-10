@@ -1,6 +1,7 @@
 // frontend/oncall-frontend/src/components/IncidentTimeline.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
+
   ClockIcon,
   UserIcon,
   ExclamationTriangleIcon,
@@ -11,6 +12,8 @@ import {
   UserPlusIcon,
   ArrowPathIcon
 } from '@heroicons/react/24/outline';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
 interface TimelineEvent {
   id: string;
@@ -38,7 +41,7 @@ const IncidentTimeline: React.FC<IncidentTimelineProps> = ({ incidentId }) => {
   const fetchTimeline = useCallback(async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:8000/api/v1/incidents/${incidentId}/timeline`, {
+      const response = await fetch(`${API_BASE_URL}/incidents/${incidentId}/timeline`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -86,7 +89,7 @@ const IncidentTimeline: React.FC<IncidentTimelineProps> = ({ incidentId }) => {
         id: '2',
         type: 'escalated',
         timestamp: new Date(now.getTime() - 115 * 60000).toISOString(),
-        user_name: 'OnCall AI',
+        user_name: 'OffCall AI',
         user_id: 'system',
         description: 'Incident escalated to on-call engineer',
         details: {

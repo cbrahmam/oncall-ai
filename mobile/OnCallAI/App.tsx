@@ -1,4 +1,4 @@
-// src/App.tsx - Complete OnCall AI Mobile App
+// src/App.tsx - Complete OffCall AI Mobile App
 import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
@@ -136,7 +136,7 @@ function App(): React.JSX.Element {
         {
           id: '2',
           title: 'System Update',
-          message: 'OnCall AI has been updated with new features',
+          message: 'OffCall AI has been updated with new features',
           type: 'system',
           timestamp: new Date(Date.now() - 3600000).toISOString(),
           read: false,
@@ -317,7 +317,7 @@ function App(): React.JSX.Element {
               </LinearGradient>
             </View>
             <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 20 }} />
-            <Text style={styles.loadingText}>Connecting to OnCall AI...</Text>
+            <Text style={styles.loadingText}>Connecting to OffCall AI...</Text>
             <Text style={styles.loadingSubtext}>Initializing AI-powered incident response</Text>
           </View>
         </LinearGradient>
@@ -339,7 +339,7 @@ function App(): React.JSX.Element {
                 <LinearGradient colors={['#3b82f6', '#8b5cf6']} style={styles.logoGradient}>
                   <Text style={styles.logoText}>⚡</Text>
                 </LinearGradient>
-                <Text style={styles.title}>OnCall AI</Text>
+                <Text style={styles.title}>OffCall AI</Text>
                 <Text style={styles.subtitle}>AI-Powered Incident Response Platform</Text>
               </View>
 
@@ -400,7 +400,7 @@ function App(): React.JSX.Element {
                     {isLoginLoading ? (
                       <ActivityIndicator color="white" />
                     ) : (
-                      <Text style={styles.loginButtonText}>Sign In to OnCall AI</Text>
+                      <Text style={styles.loginButtonText}>Sign In to OffCall AI</Text>
                     )}
                   </LinearGradient>
                 </TouchableOpacity>
@@ -408,7 +408,7 @@ function App(): React.JSX.Element {
 
               {/* Features Preview */}
               <View style={styles.featuresSection}>
-                <Text style={styles.featuresTitle}>Why OnCall AI?</Text>
+                <Text style={styles.featuresTitle}>Why OffCall AI?</Text>
                 
                 <View style={styles.featureItem}>
                   <View style={styles.featureIcon}>
@@ -788,7 +788,7 @@ function App(): React.JSX.Element {
 
             {/* App Info */}
             <View style={styles.appInfoSection}>
-              <Text style={styles.appInfoText}>OnCall AI v1.0.0</Text>
+              <Text style={styles.appInfoText}>OffCall AI v1.0.0</Text>
               <Text style={styles.appInfoSubtext}>Made with ⚡ for incident response teams</Text>
             </View>
           </ScrollView>
@@ -811,7 +811,7 @@ function App(): React.JSX.Element {
             <LinearGradient colors={['#3b82f6', '#8b5cf6']} style={styles.headerLogo}>
               <Text style={styles.headerLogoText}>⚡</Text>
             </LinearGradient>
-            <Text style={styles.headerTitle}>OnCall AI</Text>
+            <Text style={styles.headerTitle}>OffCall AI</Text>
           </View>
           
           <TouchableOpacity

@@ -1,6 +1,6 @@
 # backend/app/core/security_config.py
 """
-Enhanced security configuration for OnCall AI
+Enhanced security configuration for OffCall AI
 """
 
 import os
@@ -16,7 +16,7 @@ class SecuritySettings(BaseSettings):
     ALGORITHM: str = Field(default="RS256", description="JWT algorithm")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, description="Access token expiration")
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=30, description="Refresh token expiration")
-    JWT_KEY_ID: str = Field(default="oncall-ai-key-1", description="JWT key identifier")
+    JWT_KEY_ID: str = Field(default="offcall-ai-key-1", description="JWT key identifier")
     
     # Encryption
     ENCRYPTION_KEY: str = Field(..., description="Data encryption key")
@@ -28,8 +28,8 @@ class SecuritySettings(BaseSettings):
     LOGIN_RATE_LIMIT: int = Field(default=5, description="Login attempts per minute")
     
     # Security Headers
-    ALLOWED_HOSTS: List[str] = Field(default=["localhost", "*.oncall-ai.com"])
-    CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000", "https://app.oncall-ai.com"])
+    ALLOWED_HOSTS: List[str] = Field(default=["localhost", "*.offcall-ai.com"])
+    CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000", "https://app.offcall-ai.com"])
     
     # OAuth2 Settings
     GOOGLE_CLIENT_ID: Optional[str] = Field(default=None, description="Google OAuth2 client ID")
@@ -40,7 +40,7 @@ class SecuritySettings(BaseSettings):
     GITHUB_CLIENT_SECRET: Optional[str] = Field(default=None, description="GitHub OAuth2 client secret")
     
     # Security Monitoring
-    SECURITY_EMAIL: str = Field(default="security@oncall-ai.com", description="Security alerts email")
+    SECURITY_EMAIL: str = Field(default="security@offcall-ai.com", description="Security alerts email")
     SLACK_SECURITY_WEBHOOK: Optional[str] = Field(default=None, description="Slack webhook for security alerts")
     
     # GDPR Compliance
@@ -282,7 +282,7 @@ def downgrade():
 # backend/scripts/init_security.py
 
 """
-Security initialization script for OnCall AI
+Security initialization script for OffCall AI
 Sets up initial security configuration and data
 """
 
@@ -301,7 +301,7 @@ async def initialize_security_data():
         port=5432,
         user="admin",
         password="password",
-        database="oncall_ai"
+        database="offcall_ai"
     )
     
     try:
@@ -313,8 +313,8 @@ async def initialize_security_data():
                 "purpose": ProcessingPurpose.SERVICE_PROVISION.value,
                 "data_categories": [DataCategory.PERSONAL_IDENTIFIABLE.value, DataCategory.TECHNICAL.value],
                 "legal_basis": "Contract performance (GDPR Art. 6(1)(b))",
-                "data_subjects": "OnCall AI platform users",
-                "recipients": ["OnCall AI Inc.", "AWS (Infrastructure)", "SendGrid (Email)"],
+                "data_subjects": "OffCall AI platform users",
+                "recipients": ["OffCall AI Inc.", "AWS (Infrastructure)", "SendGrid (Email)"],
                 "retention_period": timedelta(days=2555),  # 7 years
                 "security_measures": [
                     "End-to-end encryption",
@@ -328,8 +328,8 @@ async def initialize_security_data():
                 "purpose": ProcessingPurpose.SECURITY.value,
                 "data_categories": [DataCategory.SECURITY.value, DataCategory.TECHNICAL.value],
                 "legal_basis": "Legitimate interest (GDPR Art. 6(1)(f))",
-                "data_subjects": "OnCall AI platform users",
-                "recipients": ["OnCall AI Inc.", "Security team"],
+                "data_subjects": "OffCall AI platform users",
+                "recipients": ["OffCall AI Inc.", "Security team"],
                 "retention_period": timedelta(days=2555),  # 7 years (legal requirement)
                 "security_measures": [
                     "Encrypted storage",
@@ -343,8 +343,8 @@ async def initialize_security_data():
                 "purpose": ProcessingPurpose.ANALYTICS.value,
                 "data_categories": [DataCategory.BEHAVIORAL.value, DataCategory.TECHNICAL.value],
                 "legal_basis": "Consent (GDPR Art. 6(1)(a))",
-                "data_subjects": "OnCall AI platform users who have given consent",
-                "recipients": ["OnCall AI Inc.", "Analytics team"],
+                "data_subjects": "OffCall AI platform users who have given consent",
+                "recipients": ["OffCall AI Inc.", "Analytics team"],
                 "retention_period": timedelta(days=365),  # 1 year
                 "security_measures": [
                     "Data anonymization",
@@ -414,7 +414,7 @@ async def initialize_security_data():
             "low",
             {
                 "timestamp": datetime.utcnow().isoformat(),
-                "message": "OnCall AI security system successfully initialized",
+                "message": "OffCall AI security system successfully initialized",
                 "features_enabled": [
                     "GDPR compliance",
                     "Enhanced authentication",

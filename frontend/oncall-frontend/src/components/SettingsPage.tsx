@@ -313,7 +313,7 @@ const SettingsPage: React.FC = () => {
             <div className="flex space-x-3">
               <input
                 type="text"
-                value="https://api.oncall-ai.com/webhooks/generic"
+                value="https://api.offcall-ai.com/webhooks/generic"
                 readOnly
                 className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
               />
@@ -360,7 +360,7 @@ const SettingsPage: React.FC = () => {
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Organization Slug</label>
             <div className="flex items-center space-x-3">
-              <span className="text-gray-400">oncall-ai.com/</span>
+              <span className="text-gray-400">offcall-ai.com/</span>
               <input
                 type="text"
                 defaultValue="acme-corp"

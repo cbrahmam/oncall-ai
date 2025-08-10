@@ -236,7 +236,7 @@ async def webhook_health():
     """Health check endpoint for webhooks"""
     return {
         "status": "healthy",
-        "service": "OnCall AI Webhook Service",
+        "service": "OffCall AI Webhook Service",
         "version": "1.0.0",
         "supported_sources": [
             "generic",

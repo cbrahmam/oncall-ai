@@ -35,7 +35,7 @@ class EmailService:
                     </a>
                 </div>
                 <p style="color: #666; font-size: 14px;">
-                    OnCall AI - Incident Response Platform
+                    OffCall AI - Incident Response Platform
                 </p>
             </div>
             """

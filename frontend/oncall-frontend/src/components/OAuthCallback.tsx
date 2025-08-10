@@ -3,6 +3,9 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+
+
 const OAuthCallback: React.FC = () => {
   const { setToken, setUser } = useAuth();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -46,7 +49,7 @@ const OAuthCallback: React.FC = () => {
         setMessage('Exchanging authorization code...');
 
         // Exchange code for token
-        const response = await fetch('http://localhost:8000/api/v1/oauth/callback', {
+        const response = await fetch(`${API_BASE_URL}/oauth/callback`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -121,7 +124,7 @@ const OAuthCallback: React.FC = () => {
                   <CheckCircleIcon className="w-8 h-8 text-white" />
                 </div>
               </div>
-              <h2 className="text-xl font-semibold text-white mb-4">Welcome to OnCall AI!</h2>
+              <h2 className="text-xl font-semibold text-white mb-4">Welcome to OffCall AI!</h2>
               <p className="text-gray-400 mb-4">{message}</p>
               <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
             </>

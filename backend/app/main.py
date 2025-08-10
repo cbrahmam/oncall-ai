@@ -113,7 +113,7 @@ except ImportError as e:
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
-    print("🚀 OnCall AI starting up...")
+    print("🚀 OffCall AI starting up...")
     
     # Initialize OAuth if available
     if OAUTH_AVAILABLE:
@@ -154,11 +154,11 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    print("🛑 OnCall AI shutting down...")
+    print("🛑 OffCall AI shutting down...")
 
 # Create FastAPI app
 app = FastAPI(
-    title="OnCall AI - Enterprise Edition",
+    title="OffCall AI - Enterprise Edition",
     description="AI-powered incident response with enterprise SSO and security",
     version="2.0.0",
     lifespan=lifespan,
@@ -251,7 +251,7 @@ async def root():
     """Root endpoint with feature overview"""
     
     return {
-        "message": "OnCall AI - Enterprise Edition",
+        "message": "OffCall AI - Enterprise Edition",
         "version": "2.0.0",
         "status": "operational",
         "security_level": "enterprise" if ENHANCED_SECURITY_AVAILABLE else "basic",
@@ -386,7 +386,7 @@ async def test_database():
 async def startup_event():
     
     print("\n" + "="*80)
-    print("🚀 OnCall AI Enterprise Edition - Started Successfully!")
+    print("🚀 OffCall AI Enterprise Edition - Started Successfully!")
     print("="*80)
     print("📚 API Documentation: http://localhost:8000/docs")
     print("🏠 Root Endpoint: http://localhost:8000/")

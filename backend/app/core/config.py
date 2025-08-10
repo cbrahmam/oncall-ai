@@ -8,19 +8,19 @@ class Settings(BaseSettings):
     """Application settings with enhanced security and OAuth configuration"""
     
     # App Info
-    APP_NAME: str = Field(default="OnCall AI")
+    APP_NAME: str = Field(default="OffCall AI")
     VERSION: str = Field(default="2.0.0")
     DEBUG: bool = Field(default=True)
     ENVIRONMENT: str = Field(default="development")
     
     # Database
-    DATABASE_URL: str = Field(default="postgresql://admin:password@localhost:5432/oncall_ai")
+    DATABASE_URL: str = Field(default="postgresql://admin:password@localhost:5432/offcall_ai")
     REDIS_URL: str = Field(default="redis://localhost:6379")
     
     # JWT Settings (Enhanced Security)
     SECRET_KEY: str = Field(default="APKVwV3oBOxCZqvQHeAs5ZuywsAR6jt0PymOVKrciJI")
     ENCRYPTION_KEY: str = Field(default="o6zLmZ-qY0ipmdF1UtLggotfeGhRY3kWz0m2_Em7VxQ")
-    JWT_KEY_ID: str = Field(default="oncall-ai-9f69367c")
+    JWT_KEY_ID: str = Field(default="offcall-ai-9f69367c")
     ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15)
     ACCESS_TOKEN_EXPIRE_DAYS: int = Field(default=7)  # For backward compatibility
@@ -52,9 +52,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = Field(default=[
         "http://localhost:3000", 
         "http://localhost:5173",
-        "https://app.oncall-ai.com"
+        "https://app.offcall-ai.com"
     ])
-    ALLOWED_HOSTS: List[str] = Field(default=["localhost", "*.oncall-ai.com"])
+    ALLOWED_HOSTS: List[str] = Field(default=["localhost", "*.offcall-ai.com"])
     
     # Session Security
     SESSION_COOKIE_SECURE: bool = Field(default=True)
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     ANONYMIZATION_ENABLED: bool = Field(default=True)
     
     # Security Monitoring
-    SECURITY_EMAIL: str = Field(default="security@oncall-ai.com")
+    SECURITY_EMAIL: str = Field(default="security@offcall-ai.com")
     SLACK_SECURITY_WEBHOOK: Optional[str] = Field(default=None)
     
     # External APIs
@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     SLACK_SIGNING_SECRET: Optional[str] = Field(default=None)
     
     SENDGRID_API_KEY: Optional[str] = Field(default=None)
-    FROM_EMAIL: str = Field(default="alerts@oncall-ai.com")
+    FROM_EMAIL: str = Field(default="alerts@offcall-ai.com")
     
     # Webhook Security
     WEBHOOK_SECRET: str = Field(default="your-webhook-secret-key")

@@ -1,6 +1,6 @@
 # backend/app/middleware/security.py
 """
-Comprehensive security middleware for OnCall AI
+Comprehensive security middleware for OffCall AI
 Implements rate limiting, security headers, attack detection
 """
 
@@ -129,7 +129,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data: https:; "
                 "font-src 'self' https://fonts.gstatic.com; "
-                "connect-src 'self' https://api.oncall-ai.com wss://api.oncall-ai.com; "
+                "connect-src 'self' https://api.offcall-ai.com wss://api.offcall-ai.com; "
                 "frame-ancestors 'none';"
             ),
             
@@ -153,7 +153,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             
             # Custom security headers
             "X-Security-Level": "enterprise",
-            "X-OnCall-AI-Version": "2.0.0"
+            "X-OffCall-AI-Version": "2.0.0"
         }
         
         for header, value in headers.items():
@@ -853,13 +853,13 @@ def setup_security_middleware(app: FastAPI):
     # 1. Trusted host middleware (prevent host header attacks)
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["localhost", "127.0.0.1", "*.oncall-ai.com"]
+        allowed_hosts=["localhost", "127.0.0.1", "*.offcall-ai.com"]
     )
     
     # 2. CORS middleware with strict settings
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["https://app.oncall-ai.com", "http://localhost:3000"],
+        allow_origins=["https://app.offcall-ai.com", "http://localhost:3000"],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
         allow_headers=["*"],

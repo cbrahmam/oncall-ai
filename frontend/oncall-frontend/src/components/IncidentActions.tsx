@@ -13,6 +13,9 @@ import {
 } from '@heroicons/react/24/outline';
 import { useNotifications } from '../contexts/NotificationContext';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+
+
 // Import the interface from the parent component to ensure compatibility
 interface IncidentData {
   id: string;
@@ -44,7 +47,7 @@ const IncidentActions: React.FC<IncidentActionsProps> = ({ incident, onUpdate })
     setIsUpdating(true);
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:8000/api/v1/incidents/${incident.id}`, {
+      const response = await fetch(`${API_BASE_URL}/incidents/${incident.id}`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,

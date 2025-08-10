@@ -11,6 +11,9 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+
+
 interface Team {
   id: string;
   name: string;
@@ -55,7 +58,7 @@ const TeamsManagement: React.FC = () => {
   const fetchTeams = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('http://localhost:8000/api/v1/teams/', {
+      const response = await fetch(`${API_BASE_URL}/teams/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -86,7 +89,7 @@ const TeamsManagement: React.FC = () => {
 
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('http://localhost:8000/api/v1/teams/', {
+      const response = await fetch(`${API_BASE_URL}/teams/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

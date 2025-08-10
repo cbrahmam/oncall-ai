@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { EyeIcon, EyeSlashIcon, BoltIcon, BuildingOfficeIcon, UserIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+
 interface RegisterFormData {
   email: string;
   password: string;
@@ -64,7 +66,7 @@ const ModernRegister: React.FC<ModernRegisterProps> = ({ onRegister, onSwitchToL
     setError(null);
     
     try {
-      const response = await fetch('http://localhost:8000/api/v1/auth/register', {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -128,7 +130,7 @@ const ModernRegister: React.FC<ModernRegisterProps> = ({ onRegister, onSwitchToL
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-500 to-blue-600 rounded-2xl mb-4 shadow-lg">
               <BoltIcon className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">Join OnCall AI</h1>
+            <h1 className="text-3xl font-bold text-white mb-2">Join OffCall AI</h1>
             <p className="text-purple-100">Create your account and organization</p>
           </div>
 

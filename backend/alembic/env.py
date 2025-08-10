@@ -34,7 +34,7 @@ target_metadata = Base.metadata
 
 def get_url():
     """Get database URL from environment or config"""
-    url = os.getenv("DATABASE_URL", "postgresql://admin:password@localhost:5432/oncall_ai")
+    url = os.getenv("DATABASE_URL", "postgresql://admin:password@localhost:5432/offcall_ai")
     return url
 
 def run_migrations_offline() -> None:

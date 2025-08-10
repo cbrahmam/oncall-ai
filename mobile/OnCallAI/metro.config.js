@@ -1,4 +1,4 @@
-// metro.config.js - OnCall AI React Native Metro Configuration
+// metro.config.js - OffCall AI React Native Metro Configuration
 const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
 /**
