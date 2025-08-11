@@ -277,7 +277,7 @@ async def root():
 # Health check with comprehensive status
 @app.get("/health")
 async def health_check():
-    """Enhanced health check with proper database and Redis connections"""
+    """Comprehensive health check with security and feature status"""
     
     health_status = {
         "status": "healthy",
@@ -288,39 +288,38 @@ async def health_check():
             "cors_configured": True,
             "enhanced_security": ENHANCED_SECURITY_AVAILABLE,
             "oauth_enabled": OAUTH_AVAILABLE,
-            "oauth_providers": list(oauth_providers.keys()) if oauth_providers else []
+            "oauth_providers": list(oauth_providers.keys())
         },
         "features": {
             "authentication": True,
             "database": True,
-            "incidents": True,
-            "ai_analysis": False,
-            "webhooks": False,
-            "real_time_notifications": False
+            "incidents": INCIDENTS_AVAILABLE,
+            "ai_analysis": AI_AVAILABLE,
+            "webhooks": WEBHOOKS_AVAILABLE,
+            "real_time_notifications": WEBSOCKET_AVAILABLE
         }
     }
     
-    # Test database using our fixed functions
+    # Test database connectivity with better error handling
     try:
-        from app.database import check_db_health
-        db_status = await check_db_health()
-        health_status["features"]["database_connection"] = db_status
-        if "error" in db_status:
-            health_status["status"] = "degraded"
+        from sqlalchemy import text
+        async with get_async_session() as db:
+            result = await db.execute(text("SELECT 1"))
+            test_result = result.fetchone()
+            health_status["features"]["database_connection"] = "healthy"
     except Exception as e:
         health_status["features"]["database_connection"] = f"error: {str(e)[:50]}"
         health_status["status"] = "degraded"
     
-    # Test Redis using our fixed functions
+    # Test Redis if available
     try:
-        from app.database import check_redis_health
-        redis_status = await check_redis_health()
-        health_status["features"]["redis_connection"] = redis_status
-        if "error" in redis_status:
-            health_status["status"] = "degraded"
+        import redis.asyncio as redis
+        r = redis.from_url("os.getenv("REDIS_URL", "redis://localhost:6379")")
+        await r.ping()
+        await r.close()
+        health_status["features"]["redis_connection"] = "healthy"
     except Exception as e:
         health_status["features"]["redis_connection"] = f"error: {str(e)[:50]}"
-        health_status["status"] = "degraded"
     
     return health_status
 

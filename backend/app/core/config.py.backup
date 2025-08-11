@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = Field(default="development")
     
     # Database
-    DATABASE_URL: str = Field(default="postgresql://dbadmin:password@database:5432/offcall_ai")
-    REDIS_URL: str = Field(default="redis://redis-service:6379")
+    DATABASE_URL: str = Field(default="postgresql://admin:password@localhost:5432/offcall_ai")
+    REDIS_URL: str = Field(default="redis://localhost:6379")
     
     # JWT Settings (Enhanced Security)
     SECRET_KEY: str = Field(default="APKVwV3oBOxCZqvQHeAs5ZuywsAR6jt0PymOVKrciJI")

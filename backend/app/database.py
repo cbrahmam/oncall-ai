@@ -1,5 +1,6 @@
 import os
 from sqlalchemy import create_engine
+from sqlalchemy import text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -9,15 +10,23 @@ from app.core.config import settings
 
 load_dotenv()
 
-# Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:password@localhost:5432/offcall_ai")
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+# Get database URL from environment
+DATABASE_URL = os.getenv("DATABASE_URL") or settings.DATABASE_URL
+REDIS_URL = os.getenv("REDIS_URL") or settings.REDIS_URL
 
-# Convert sync URL to async for SQLAlchemy
-ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+print(f"🔧 Using DATABASE_URL: {DATABASE_URL[:50]}...")
+print(f"🔧 Using REDIS_URL: {REDIS_URL[:30]}...")
 
-# SQLAlchemy setup
-engine = create_async_engine(ASYNC_DATABASE_URL, echo=True)
+# Convert to asyncpg format for async engine (the RIGHT way)
+if DATABASE_URL.startswith("postgresql://"):
+    ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+else:
+    ASYNC_DATABASE_URL = DATABASE_URL
+
+print(f"🔧 Async URL: {ASYNC_DATABASE_URL[:50]}...")
+
+# SQLAlchemy setup with asyncpg
+engine = create_async_engine(ASYNC_DATABASE_URL, echo=False)
 SessionLocal = async_sessionmaker(
     autocommit=False,
     autoflush=False,
@@ -30,53 +39,38 @@ Base = declarative_base()
 # Redis setup
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
-# Dependency to get database session
+# Dependencies
 async def get_db():
     async with SessionLocal() as session:
         try:
             yield session
         finally:
             await session.close()
+
 async def get_async_session():
     async with SessionLocal() as session:
         try:
             yield session
         finally:
             await session.close()
-# Dependency to get Redis client
+
 async def get_redis():
-    """Get async Redis connection"""
-    return redis.from_url(settings.REDIS_URL)
+    return redis.from_url(REDIS_URL)
 
-# Database initialization
-async def init_db():
-    """Initialize database tables"""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-# Health check functions
+# Health check functions  
 async def check_db_health():
-    """Check database connectivity"""
     try:
         async with SessionLocal() as session:
-            await session.execute("SELECT 1")
-        return True
-    except Exception:
-        return False
+            result = await session.execute(text("SELECT 1"))
+            return "connected"
+    except Exception as e:
+        print(f"Database health check failed: {e}")
+        return f"error: {str(e)[:50]}"
 
 async def check_redis_health():
-    """Check Redis connectivity"""
     try:
         await redis_client.ping()
-        return True
-    except Exception:
-        return False
-async def test_db_connection():
-    """Test database connection"""
-    try:
-        async with get_async_session() as db:
-            await db.execute("SELECT 1")
-        return True
+        return "connected"
     except Exception as e:
-        print(f"Database connection test failed: {e}")
-        return False
+        print(f"Redis health check failed: {e}")
+        return f"error: {str(e)[:50]}"
