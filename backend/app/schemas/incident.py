@@ -21,6 +21,7 @@ class IncidentCreate(BaseModel):
     description: str = Field(..., min_length=1, description="Detailed description")
     severity: IncidentSeverity = Field(default=IncidentSeverity.MEDIUM, description="Incident severity")
     source: Optional[str] = Field(default="manual", max_length=100, description="Source of the incident")
+    tags: Optional[List[str]] = Field(default_factory=list, description="Incident tags")  # ADD THIS LINE
 
 class IncidentUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -28,6 +29,7 @@ class IncidentUpdate(BaseModel):
     severity: Optional[IncidentSeverity] = None
     status: Optional[IncidentStatus] = None
     assigned_to: Optional[str] = None
+    tags: Optional[List[str]] = None  # ADD THIS LINE TOO
 
 # Response schemas
 class IncidentResponse(BaseModel):
@@ -43,6 +45,7 @@ class IncidentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     resolved_at: Optional[datetime] = None
+    tags: List[str] = []  # ADD THIS LINE
 
     class Config:
         from_attributes = True
@@ -62,3 +65,4 @@ class IncidentFilters(BaseModel):
     created_by: Optional[str] = None
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
+    tags: Optional[List[str]] = None  # ADD THIS LINE
