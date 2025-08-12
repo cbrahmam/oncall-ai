@@ -458,3 +458,10 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
+# Add monitoring webhook routes
+from app.api.v1.endpoints.monitoring_webhooks import router as monitoring_router
+app.include_router(monitoring_router, prefix="/api/v1")
+
+# Add monitoring webhook routes
+from app.api.v1.endpoints.monitoring_webhooks import router as monitoring_router
+app.include_router(monitoring_router, prefix="/api/v1")

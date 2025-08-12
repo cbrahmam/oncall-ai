@@ -38,3 +38,10 @@ twilio==8.10.0
 
 # Security
 bcrypt==4.0.1
+# Monitoring integrations
+aiohttp==3.9.1
+requests==2.31.0
+
+# Monitoring integrations
+aiohttp==3.9.1
+requests==2.31.0

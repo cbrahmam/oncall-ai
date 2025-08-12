@@ -1,12 +1,15 @@
-// frontend/src/components/OAuthCallback.tsx
+// frontend/src/components/OAuthCallback.tsx - Fixed with onComplete prop
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { CheckCircleIcon, ExclamationTriangleIcon, BoltIcon } from '@heroicons/react/24/outline';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
+interface OAuthCallbackProps {
+  onComplete: () => void;
+}
 
-const OAuthCallback: React.FC = () => {
+const OAuthCallback: React.FC<OAuthCallbackProps> = ({ onComplete }) => {
   const { setToken, setUser } = useAuth();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Processing OAuth login...');
@@ -81,9 +84,9 @@ const OAuthCallback: React.FC = () => {
         setStatus('success');
         setMessage(data.is_new_user ? 'Account created successfully!' : 'Login successful!');
 
-        // Redirect to dashboard after a short delay
+        // Call onComplete after a short delay
         setTimeout(() => {
-          window.location.href = '/app';
+          onComplete();
         }, 2000);
 
       } catch (error) {
@@ -93,26 +96,33 @@ const OAuthCallback: React.FC = () => {
         
         // Redirect to auth page after error
         setTimeout(() => {
-          window.location.href = '/auth';
+          onComplete(); // Still call onComplete to handle navigation
         }, 3000);
       }
     };
 
     handleOAuthCallback();
-  }, [setToken, setUser]);
+  }, [setToken, setUser, onComplete]);
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
       <div className="max-w-md w-full mx-4">
-        <div className="glass-card rounded-2xl p-8 text-center">
+        <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 border border-gray-700/50 backdrop-blur-sm rounded-2xl p-8 text-center">
           {/* Loading State */}
           {status === 'loading' && (
             <>
               <div className="flex justify-center mb-6">
-                <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 via-purple-600 to-pink-500 rounded-full flex items-center justify-center animate-pulse">
+                  <BoltIcon className="w-8 h-8 text-white" />
+                </div>
               </div>
               <h2 className="text-xl font-semibold text-white mb-4">Completing Sign In</h2>
               <p className="text-gray-400">{message}</p>
+              <div className="mt-4">
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                </div>
+              </div>
             </>
           )}
 
@@ -120,7 +130,7 @@ const OAuthCallback: React.FC = () => {
           {status === 'success' && (
             <>
               <div className="flex justify-center mb-6">
-                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
+                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center animate-pulse">
                   <CheckCircleIcon className="w-8 h-8 text-white" />
                 </div>
               </div>
@@ -142,8 +152,8 @@ const OAuthCallback: React.FC = () => {
               <p className="text-gray-400 mb-4">{message}</p>
               <p className="text-sm text-gray-500">Redirecting to sign in page...</p>
               <button
-                onClick={() => window.location.href = '/auth'}
-                className="mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+                onClick={onComplete}
+                className="mt-4 px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-lg transition-all duration-300 transform hover:scale-105"
               >
                 Try Again
               </button>
