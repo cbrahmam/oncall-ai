@@ -1,3 +1,52 @@
+#!/bin/bash
+
+echo "🚀 OFFCALL AI - PART 1: AI SCHEMAS AND CORE SETUP"
+echo "================================================="
+echo "🎯 Creating AI schemas, secrets, and dependencies"
+echo ""
+
+set -e
+
+# Color codes
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+NC='\033[0m'
+
+print_status() { echo -e "${GREEN}✅ $1${NC}"; }
+print_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
+print_step() { echo -e "${PURPLE}🔧 $1${NC}"; }
+
+# Ensure we're in backend directory
+if [ ! -f "app/main.py" ]; then
+    if [ -d "backend" ]; then
+        cd backend
+        print_info "Changed to backend directory"
+    else
+        echo "❌ Cannot find backend directory. Please run from project root or backend directory."
+        exit 1
+    fi
+fi
+
+print_step "STEP 1: Creating AI API Keys Secret"
+echo "=================================="
+
+kubectl create secret generic ai-api-keys -n offcall-ai \
+  --from-literal=CLAUDE_CODE_API_KEY="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" \
+  --from-literal=GEMINI_API_KEY="placeholder-gemini-key" \
+  --from-literal=GROK_API_KEY="placeholder-grok-key" \
+  --from-literal=OPENAI_API_KEY="placeholder-openai-key" \
+  --from-literal=ANTHROPIC_API_KEY="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" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+print_status "AI API keys secret created/updated"
+
+print_step "STEP 2: Creating AI Schemas"
+echo "=========================="
+
+mkdir -p app/schemas
+
+cat > app/schemas/ai.py << 'EOF'
 # backend/app/schemas/ai.py - Complete AI Integration Schemas
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any, Union
@@ -169,3 +218,41 @@ class IntegrationStatusResponse(BaseModel):
     provider_status: Dict[str, Any]
     ai_capabilities: Dict[str, bool]
     recommendations: List[str]
+EOF
+
+print_status "AI schemas created with comprehensive models"
+
+print_step "STEP 3: Adding AI Dependencies"
+echo "============================="
+
+cat >> requirements.txt << 'EOF'
+
+# AI Integration Dependencies (Added by build script)
+anthropic>=0.18.0                # Claude Code integration
+google-generativeai>=0.5.0       # Gemini CLI integration  
+openai>=1.12.0                   # Enhanced OpenAI integration
+aiohttp>=3.9.0                   # Async HTTP for AI APIs
+asyncio-throttle>=1.0.2          # Rate limiting for AI calls
+cachetools>=5.3.0                # AI response caching
+tenacity>=8.2.0                  # Retry logic for AI APIs
+tiktoken>=0.6.0                  # Token counting for cost optimization
+structlog>=23.1.0                # Structured logging for AI operations  
+prometheus-client>=0.20.0        # Metrics for AI performance
+httpx>=0.27.0                    # Modern HTTP client
+python-dateutil>=2.8.2          # Date parsing
+pydantic[email]>=2.5.0           # Enhanced validation
+typing-extensions>=4.8.0         # Type hints support
+
+EOF
+
+print_status "AI dependencies added to requirements.txt"
+
+echo ""
+print_status "PART 1 COMPLETE!"
+echo "================="
+echo "✅ AI API keys secret configured"
+echo "✅ AI schemas with all models created"
+echo "✅ AI dependencies added to requirements.txt"
+echo ""
+echo "🔗 Next: Run part 2 to create AI services"
+echo "   ./ai_build_part2.sh"

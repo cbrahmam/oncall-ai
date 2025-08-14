@@ -1,3 +1,39 @@
+#!/bin/bash
+
+echo "🚀 OFFCALL AI - PART 2: AI SERVICES IMPLEMENTATION"
+echo "================================================="
+echo "🎯 Creating main AI service and supporting services"
+echo ""
+
+set -e
+
+# Color codes
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+NC='\033[0m'
+
+print_status() { echo -e "${GREEN}✅ $1${NC}"; }
+print_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
+print_step() { echo -e "${PURPLE}🔧 $1${NC}"; }
+
+# Ensure we're in backend directory
+if [ ! -f "app/main.py" ]; then
+    if [ -d "backend" ]; then
+        cd backend
+        print_info "Changed to backend directory"
+    else
+        echo "❌ Cannot find backend directory."
+        exit 1
+    fi
+fi
+
+print_step "STEP 1: Creating Enhanced AI Service"
+echo "==================================="
+
+mkdir -p app/services
+
+cat > app/services/ai_service.py << 'EOF'
 # backend/app/services/ai_service.py - Complete Multi-AI Integration Service
 import asyncio
 import time
@@ -580,3 +616,209 @@ class EnhancedAIService:
             "severity": scenario["severity"],
             "scenario_type": scenario_type
         }
+EOF
+
+print_status "Enhanced AI service created"
+
+print_step "STEP 2: Creating Supporting AI Services"
+echo "======================================"
+
+# Create Gemini CLI service
+cat > app/services/gemini_cli_service.py << 'EOF'
+# backend/app/services/gemini_cli_service.py - Gemini CLI Integration
+import asyncio
+import json
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+
+from app.core.config import settings
+
+class GeminiCLIService:
+    """Integration service for Gemini CLI automated operations"""
+    
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or getattr(settings, 'GEMINI_API_KEY', None)
+    
+    async def generate_cli_commands(self, incident: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate CLI commands for incident resolution"""
+        
+        # Mock implementation - replace with actual Gemini API
+        await asyncio.sleep(0.3)
+        
+        commands = [
+            {
+                "step": 1,
+                "command": "kubectl get pods -n offcall-ai",
+                "description": "Check pod status",
+                "type": "kubernetes"
+            },
+            {
+                "step": 2,
+                "command": "kubectl describe pod -n offcall-ai -l app=offcall-ai-backend",
+                "description": "Get pod details",
+                "type": "kubernetes"
+            },
+            {
+                "step": 3,
+                "command": "kubectl logs -n offcall-ai deployment/offcall-ai-backend --tail=50",
+                "description": "Check recent logs",
+                "type": "kubernetes"
+            }
+        ]
+        
+        return {
+            "commands": commands,
+            "estimated_time": "5 minutes",
+            "risk_level": "low",
+            "provider": "gemini_cli"
+        }
+    
+    async def optimize_system_performance(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate performance optimization commands"""
+        
+        await asyncio.sleep(0.4)
+        
+        return {
+            "optimizations": [
+                {
+                    "area": "memory",
+                    "command": "kubectl patch deployment offcall-ai-backend -p '{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"backend\",\"resources\":{\"limits\":{\"memory\":\"2Gi\"}}}]}}}}' -n offcall-ai",
+                    "description": "Increase memory limit",
+                    "impact": "Prevent OOM kills"
+                },
+                {
+                    "area": "scaling",
+                    "command": "kubectl autoscale deployment offcall-ai-backend --cpu-percent=50 --min=1 --max=5 -n offcall-ai",
+                    "description": "Enable auto-scaling",
+                    "impact": "Handle traffic spikes"
+                }
+            ],
+            "provider": "gemini_cli",
+            "confidence": 0.88
+        }
+EOF
+
+print_status "Gemini CLI service created"
+
+# Create incident service
+cat > app/services/incident_service.py << 'EOF'
+# backend/app/services/incident_service.py - Incident Management Service
+from typing import Dict, List, Optional, Any
+from datetime import datetime, timedelta
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.incident import Incident
+
+class IncidentService:
+    """Service for incident management operations"""
+    
+    def __init__(self, db: AsyncSession):
+        self.db = db
+    
+    async def create_incident_from_webhook(
+        self, 
+        webhook_data: Dict[str, Any], 
+        organization_id: str
+    ) -> Incident:
+        """Create incident from webhook payload"""
+        
+        # Extract incident data from webhook
+        title = webhook_data.get("title", "Unknown Incident")
+        description = webhook_data.get("description", "")
+        severity = webhook_data.get("severity", "MEDIUM")
+        source = webhook_data.get("source", "webhook")
+        tags = webhook_data.get("tags", [])
+        
+        # Create incident object (mock implementation)
+        incident = Incident(
+            id=f"inc_{int(datetime.utcnow().timestamp())}",
+            organization_id=organization_id,
+            title=title,
+            description=description,
+            severity=severity,
+            status="OPEN",
+            source=source,
+            tags=tags,
+            created_at=datetime.utcnow()
+        )
+        
+        return incident
+    
+    async def find_similar_incidents(
+        self, 
+        incident: Incident, 
+        organization_id: str,
+        limit: int = 5
+    ) -> List[Incident]:
+        """Find similar historical incidents for pattern analysis"""
+        
+        # Mock implementation - replace with actual similarity search
+        similar_incidents = []
+        
+        # Simple keyword-based similarity
+        keywords = self._extract_keywords(incident.title + " " + (incident.description or ""))
+        
+        # Would typically use vector similarity or keyword matching
+        return similar_incidents
+    
+    def _extract_keywords(self, text: str) -> List[str]:
+        """Extract keywords from incident text"""
+        import re
+        words = re.findall(r'\w+', text.lower())
+        # Filter out common words
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
+        keywords = [word for word in words if len(word) > 3 and word not in stop_words]
+        return list(set(keywords))[:10]
+    
+    async def update_incident_status(
+        self, 
+        incident_id: str, 
+        status: str, 
+        organization_id: str
+    ) -> bool:
+        """Update incident status"""
+        
+        # Mock implementation
+        return True
+    
+    async def get_incident_metrics(
+        self, 
+        organization_id: str, 
+        days: int = 30
+    ) -> Dict[str, Any]:
+        """Get incident metrics for organization"""
+        
+        # Mock implementation
+        return {
+            "total_incidents": 45,
+            "avg_resolution_time_minutes": 35,
+            "mttr_reduction": "65%",
+            "auto_resolved_percentage": 40,
+            "top_incident_types": [
+                {"type": "kubernetes_pod_failure", "count": 15},
+                {"type": "database_performance", "count": 12},
+                {"type": "memory_leak", "count": 8},
+                {"type": "network_connectivity", "count": 6},
+                {"type": "ssl_certificate", "count": 4}
+            ],
+            "severity_distribution": {
+                "CRITICAL": 5,
+                "HIGH": 18,
+                "MEDIUM": 15,
+                "LOW": 7
+            }
+        }
+EOF
+
+print_status "Incident service created"
+
+echo ""
+print_status "PART 2 COMPLETE!"
+echo "================="
+echo "✅ Enhanced AI service with multi-provider support"
+echo "✅ Gemini CLI service for command automation"
+echo "✅ Incident service for business logic"
+echo "✅ Sub-2 second analysis capability implemented"
+echo ""
+echo "🔗 Next: Run part 3 to create AI endpoints"
+echo "   ./ai_build_part3.sh"
