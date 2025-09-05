@@ -48,7 +48,6 @@ requests==2.31.0
 # AI Integration Dependencies (Added by build script)
 anthropic>=0.18.0                # Claude Code integration
 google-generativeai>=0.5.0       # Gemini CLI integration  
-openai>=1.12.0                   # Enhanced OpenAI integration
 aiohttp>=3.9.0                   # Async HTTP for AI APIs
 asyncio-throttle>=1.0.2          # Rate limiting for AI calls
 cachetools>=5.3.0                # AI response caching

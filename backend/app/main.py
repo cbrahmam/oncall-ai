@@ -246,6 +246,22 @@ if AI_AVAILABLE:
 if WEBSOCKET_AVAILABLE:
     app.include_router(websocket_router, prefix="/api/v1", tags=["WebSockets", "Notifications"])
 
+# Add monitoring webhook routes (SINGLE INSTANCE)
+try:
+    from app.api.v1.endpoints.monitoring_webhooks import router as monitoring_router
+    app.include_router(monitoring_router, prefix="/api/v1", tags=["Monitoring"])
+    print('✅ Monitoring webhooks loaded')
+except ImportError as e:
+    print(f'⚠️  Monitoring webhooks not available: {e}')
+
+# Add real AI integration (SINGLE INSTANCE)
+try:
+    from app.api.v1.endpoints import ai_real
+    app.include_router(ai_real.router, prefix="/api/v1/ai", tags=["Real AI"])
+    print('✅ Real AI endpoints loaded')
+except ImportError as e:
+    print(f'⚠️  Real AI endpoints not available: {e}')
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -383,6 +399,7 @@ async def test_database():
             "error": str(e),
             "error_type": type(e).__name__
         }
+
 # Enhanced startup message
 @app.on_event("startup")
 async def startup_event():
@@ -458,10 +475,3 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
-# Add monitoring webhook routes
-from app.api.v1.endpoints.monitoring_webhooks import router as monitoring_router
-app.include_router(monitoring_router, prefix="/api/v1")
-
-# Add monitoring webhook routes
-from app.api.v1.endpoints.monitoring_webhooks import router as monitoring_router
-app.include_router(monitoring_router, prefix="/api/v1")

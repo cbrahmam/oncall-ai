@@ -8,7 +8,6 @@ class AIProvider(str, Enum):
     """Supported AI providers for incident resolution"""
     CLAUDE_CODE = "claude_code"
     GEMINI_CLI = "gemini_cli" 
-    GPT4 = "gpt4"
     GROK = "grok"
     FALLBACK = "fallback"
 
@@ -147,7 +146,6 @@ class DemoResponse(BaseModel):
 class MultiAIRequest(BaseModel):
     """Request for multi-AI provider comparison"""
     incident_id: str
-    providers: List[AIProvider] = Field(default=[AIProvider.CLAUDE_CODE, AIProvider.GEMINI_CLI, AIProvider.GPT4])
 
 class MultiAIResponse(BaseModel):
     """Response from multi-AI comparison"""
