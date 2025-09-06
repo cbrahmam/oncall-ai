@@ -10,3 +10,7 @@ api_router.include_router(teams.router, prefix="/teams", tags=["teams"])
 # Real AI Integration
 from app.api.v1.endpoints import ai_real
 api_router.include_router(ai_real.router, prefix="/ai", tags=["ai"])
+
+# Billing Integration
+from app.api.v1.endpoints import billing
+api_router.include_router(billing.router, prefix="/billing", tags=["billing"])

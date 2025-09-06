@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.database import get_db
-from app.core.security import get_current_user
+from app.database import get_async_session  # Fixed import
+from app.core.deps import get_current_user  # Fixed import 
 from app.models.user import User
 from app.models.organization import Organization
 from app.services.stripe_service import StripeService
@@ -16,11 +16,21 @@ class CheckoutRequest(BaseModel):
 class CheckoutResponse(BaseModel):
     url: str
 
+class SubscriptionResponse(BaseModel):
+    active: bool
+    plan_type: str
+    status: str
+
+@router.get("/health")
+async def billing_health():
+    """Health check for billing service"""
+    return {"status": "healthy", "service": "billing"}
+
 @router.post("/create-checkout", response_model=CheckoutResponse)
 async def create_checkout(
     checkout_data: CheckoutRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     # Get user's organization
     result = await db.execute(
@@ -60,3 +70,23 @@ async def create_checkout(
     )
     
     return CheckoutResponse(url=session_data['url'])
+
+@router.get("/subscription", response_model=SubscriptionResponse)
+async def get_subscription(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Get current subscription status"""
+    result = await db.execute(
+        select(Organization).where(Organization.id == current_user.organization_id)
+    )
+    organization = result.scalar_one_or_none()
+    
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    
+    return SubscriptionResponse(
+        active=organization.subscription_status == "active",
+        plan_type=organization.plan_type or "free",
+        status=organization.subscription_status or "inactive"
+    )
