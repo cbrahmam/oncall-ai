@@ -13,7 +13,7 @@ from app.database import get_async_session
 
 # Import core endpoints - these should always work
 from app.api.v1.endpoints import auth
-
+from app.api.v1.endpoints import billing
 # Import additional endpoints with better error handling
 INCIDENTS_AVAILABLE = False
 WEBHOOKS_AVAILABLE = False
@@ -218,6 +218,7 @@ app.add_middleware(
 # Include core routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 
+app.include_router(billing.router, prefix="/api/v1/billing", tags=["Billing"])
 # Include OAuth router if available
 if OAUTH_AVAILABLE:
     app.include_router(oauth.router, prefix="/api/v1/oauth", tags=["OAuth", "SSO"])
