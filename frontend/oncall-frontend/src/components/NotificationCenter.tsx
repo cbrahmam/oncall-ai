@@ -77,9 +77,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
     }
   };
 
-  const formatTimestamp = (timestamp: Date) => {
+  // FIXED: Handle both string and Date inputs
+  const formatTimestamp = (timestamp: string | Date) => {
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
     const now = new Date();
-    const diff = now.getTime() - timestamp.getTime();
+    const diff = now.getTime() - date.getTime();
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
@@ -192,8 +194,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
                   }`}
                   onClick={() => {
                     markAsRead(notification.id);
-                    if (notification.actionUrl) {
-                      window.location.href = notification.actionUrl;
+                    if (notification.action_url) {
+                      window.location.href = notification.action_url;
                     }
                   }}
                 >
@@ -214,7 +216,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
                             {notification.message}
                           </p>
                           <p className="mt-2 text-xs text-gray-500">
-                            {formatTimestamp(notification.timestamp)}
+                            {formatTimestamp(notification.created_at)}
                           </p>
                         </div>
 

@@ -1,10 +1,9 @@
-// frontend/src/App.tsx - Updated with proper routing and authentication flow
+// frontend/src/App.tsx - Updated with Teams completely removed
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext';
 import AuthPages from './components/AuthPages';
 import Dashboard from './components/Dashboard';
-import TeamsManagement from './components/TeamsManagement';
 import SettingsPage from './components/SettingsPage';
 import UserProfile from './components/UserProfile';
 import LandingPage from './components/LandingPage';
@@ -15,7 +14,8 @@ import NotificationSettings from './components/NotificationSettings';
 import IncidentDetail from './components/IncidentDetail';
 import { BellIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 
-type Page = 'landing' | 'auth' | 'dashboard' | 'teams' | 'settings' | 'profile' | 'notifications' | 'incident-detail' | 'oauth-callback';
+// Removed 'teams' from the Page type
+type Page = 'landing' | 'auth' | 'dashboard' | 'settings' | 'profile' | 'notifications' | 'incident-detail' | 'oauth-callback';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
@@ -24,7 +24,7 @@ const AppContent: React.FC = () => {
   const [currentIncidentId, setCurrentIncidentId] = useState<string | null>(null);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
 
-  // Simple client-side routing with proper navigation
+  // Simple client-side routing with proper navigation (teams removed)
   useEffect(() => {
     const path = window.location.pathname;
     const incidentMatch = path.match(/\/incidents\/([a-zA-Z0-9-]+)/);
@@ -34,8 +34,7 @@ const AppContent: React.FC = () => {
     } else if (incidentMatch) {
       setCurrentIncidentId(incidentMatch[1]);
       setCurrentPage('incident-detail');
-    } else if (path.includes('/teams')) setCurrentPage('teams');
-    else if (path.includes('/settings')) setCurrentPage('settings');
+    } else if (path.includes('/settings')) setCurrentPage('settings');
     else if (path.includes('/profile')) setCurrentPage('profile');
     else if (path.includes('/notifications')) setCurrentPage('notifications');
     else if (path.includes('/app') || path.includes('/dashboard')) setCurrentPage('dashboard');
@@ -52,8 +51,7 @@ const AppContent: React.FC = () => {
       } else if (newIncidentMatch) {
         setCurrentIncidentId(newIncidentMatch[1]);
         setCurrentPage('incident-detail');
-      } else if (newPath.includes('/teams')) setCurrentPage('teams');
-      else if (newPath.includes('/settings')) setCurrentPage('settings');
+      } else if (newPath.includes('/settings')) setCurrentPage('settings');
       else if (newPath.includes('/profile')) setCurrentPage('profile');
       else if (newPath.includes('/notifications')) setCurrentPage('notifications');
       else if (newPath.includes('/app') || newPath.includes('/dashboard')) setCurrentPage('dashboard');
@@ -65,20 +63,13 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Redirect authenticated users from landing page to dashboard
-  useEffect(() => {
-    if (isAuthenticated && currentPage === 'landing') {
-      navigate('dashboard');
-    }
-  }, [isAuthenticated, currentPage]);
-
-  // Demo notification on successful login
+  // Welcome notification for authenticated users (only show once)
   useEffect(() => {
     if (isAuthenticated && user && currentPage === 'dashboard') {
       const timer = setTimeout(() => {
         showToast({
-          type: 'system',
-          title: 'Welcome to OffCall AI! 🚀',
+          type: 'success',
+          title: 'Welcome to OffCall AI',
           message: 'Real-time notifications are now active. You\'ll receive instant alerts for incidents and system updates.',
           autoClose: true,
           duration: 8000
@@ -110,11 +101,9 @@ const AppContent: React.FC = () => {
   // Handle navigation from landing page to register (not login)
   const handleNavigateToAuth = () => {
     navigate('auth');
-    // You can add a state to show register form by default
-    // or update the AuthPages component to show register first
   };
 
-  // Navigation Header Component for authenticated users
+  // Navigation Header Component for authenticated users (teams removed)
   const NavigationHeader = () => (
     <nav className="backdrop-blur-xl border-b border-gray-800/50 sticky top-0 z-30 bg-black/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -134,7 +123,7 @@ const AppContent: React.FC = () => {
             </button>
           </div>
 
-          {/* Navigation Links */}
+          {/* Navigation Links - TEAMS REMOVED */}
           <div className="hidden md:flex items-center space-x-8">
             <button
               onClick={() => navigate('dashboard')}
@@ -143,14 +132,6 @@ const AppContent: React.FC = () => {
               }`}
             >
               Dashboard
-            </button>
-            <button
-              onClick={() => navigate('teams')}
-              className={`text-sm font-medium transition-colors ${
-                currentPage === 'teams' ? 'text-blue-400' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Teams
             </button>
             <button
               onClick={() => navigate('settings')}
@@ -280,12 +261,10 @@ const AppContent: React.FC = () => {
       );
     }
 
-    // Authenticated user pages
+    // Authenticated user pages (TEAMS REMOVED)
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard onNavigateToIncident={(id) => navigate('incident-detail', id)} />;
-      case 'teams':
-        return <TeamsManagement />;
       case 'settings':
         return <SettingsPage />;
       case 'profile':

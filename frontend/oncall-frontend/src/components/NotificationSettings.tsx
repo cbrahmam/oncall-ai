@@ -1,4 +1,4 @@
-// frontend/src/components/CleanNotificationSettings.tsx - SIMPLIFIED & MODERN
+// frontend/src/components/NotificationSettings.tsx - FIXED React Hooks Error
 import React, { useState } from 'react';
 import { 
   BellIcon,
@@ -14,7 +14,7 @@ import {
 import { useNotifications } from '../contexts/NotificationContext';
 
 const NotificationSettings: React.FC = () => {
-  const { preferences, updatePreferences, requestPermission } = useNotifications();
+  const { preferences, updatePreferences, requestPermission, showToast } = useNotifications(); // FIXED: Added showToast here
   const [permissionStatus, setPermissionStatus] = useState<string>(
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
   );
@@ -282,8 +282,7 @@ const NotificationSettings: React.FC = () => {
           </div>
           <button
             onClick={() => {
-              // Use the showToast function from context
-              const { showToast } = useNotifications();
+              // FIXED: Using showToast from component level instead of calling useNotifications inside callback
               showToast({
                 type: 'system',
                 title: 'Test Notification',

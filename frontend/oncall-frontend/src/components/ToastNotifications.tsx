@@ -77,8 +77,8 @@ const ToastNotifications: React.FC = () => {
 
   const handleToastClick = (notification: any) => {
     markAsRead(notification.id);
-    if (notification.actionUrl) {
-      window.location.href = notification.actionUrl;
+    if (notification.action_url) {
+      window.location.href = notification.action_url;
     }
   };
 
@@ -118,7 +118,7 @@ const ToastNotifications: React.FC = () => {
                   
                   {/* Timestamp */}
                   <p className="mt-2 text-xs text-gray-400">
-                    {notification.timestamp.toLocaleTimeString()}
+                    {new Date(notification.created_at).toLocaleTimeString()}
                   </p>
                 </div>
 
@@ -151,7 +151,7 @@ const ToastNotifications: React.FC = () => {
                     onClick={(e) => {
                       e.stopPropagation();
                       // TODO: Add acknowledge functionality
-                      console.log('Acknowledging incident:', notification.incidentId);
+                      console.log('Acknowledging incident:', notification.incident_id);
                     }}
                     className="px-3 py-1 bg-yellow-500/20 text-yellow-300 rounded-lg text-xs font-medium hover:bg-yellow-500/30 transition-colors"
                   >
@@ -160,8 +160,8 @@ const ToastNotifications: React.FC = () => {
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (notification.actionUrl) {
-                        window.location.href = notification.actionUrl;
+                      if (notification.action_url) {
+                        window.location.href = notification.action_url;
                       }
                     }}
                     className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-xs font-medium hover:bg-blue-500/30 transition-colors"
