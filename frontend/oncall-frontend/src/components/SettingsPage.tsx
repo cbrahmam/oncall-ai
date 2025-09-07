@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// frontend/src/components/SettingsPage.tsx - FIXED WITH REAL API INTEGRATION
+import React, { useState, useEffect } from 'react';
 import {
   CogIcon,
   UserIcon,
@@ -11,72 +12,54 @@ import {
   PlusIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationContext';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
 interface Integration {
   id: string;
   name: string;
   type: string;
-  icon: string;
-  description: string;
-  isConnected: boolean;
-  lastSync?: string;
+  is_active: boolean;
+  config: any;
+  created_at: string;
+  last_sync_at?: string;
+}
+
+interface Organization {
+  id: string;
+  name: string;
+  slug?: string;
+  plan_type: string;
+  subscription_status: string;
+  max_users: number;
+}
+
+interface TeamMember {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+}
+
+interface Subscription {
+  active: boolean;
+  plan_type: string;
+  status: string;
 }
 
 const SettingsPage: React.FC = () => {
   const { user } = useAuth();
+  const { showToast } = useNotifications();
   const [activeTab, setActiveTab] = useState('profile');
-  const [integrations, setIntegrations] = useState<Integration[]>([
-    {
-      id: '1',
-      name: 'Slack',
-      type: 'slack',
-      icon: '💬',
-      description: 'Send incident notifications to Slack channels',
-      isConnected: false
-    },
-    {
-      id: '2',
-      name: 'Datadog',
-      type: 'datadog',
-      icon: '📊',
-      description: 'Monitor infrastructure and receive alerts from Datadog',
-      isConnected: false
-    },
-    {
-      id: '3',
-      name: 'Grafana',
-      type: 'grafana',
-      icon: '📈',
-      description: 'Connect Grafana dashboards and alerts',
-      isConnected: false
-    },
-    {
-      id: '4',
-      name: 'AWS CloudWatch',
-      type: 'aws_cloudwatch',
-      icon: '☁️',
-      description: 'Receive alerts from AWS CloudWatch',
-      isConnected: false
-    },
-    {
-      id: '5',
-      name: 'PagerDuty',
-      type: 'pagerduty',
-      icon: '📟',
-      description: 'Import existing PagerDuty schedules and escalations',
-      isConnected: false
-    },
-    {
-      id: '6',
-      name: 'Email (SMTP)',
-      type: 'email',
-      icon: '📧',
-      description: 'Send email notifications for incidents',
-      isConnected: true,
-      lastSync: '2 hours ago'
-    }
-  ]);
-
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Real data states
+  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [notificationSettings, setNotificationSettings] = useState({
     email: true,
     sms: true,
@@ -96,12 +79,158 @@ const SettingsPage: React.FC = () => {
     { id: 'security', name: 'Security', icon: ShieldCheckIcon },
   ];
 
-  const handleIntegrationToggle = (integrationId: string) => {
-    setIntegrations(prev => prev.map(integration => 
-      integration.id === integrationId 
-        ? { ...integration, isConnected: !integration.isConnected }
-        : integration
-    ));
+  // Fetch real data from APIs
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        };
+
+        // Fetch organization details
+        const orgResponse = await fetch(`${API_BASE_URL}/organizations/me`, { headers });
+        if (orgResponse.ok) {
+          const orgData = await orgResponse.json();
+          setOrganization(orgData);
+        }
+
+        // Fetch subscription details
+        const subResponse = await fetch(`${API_BASE_URL}/billing/subscription`, { headers });
+        if (subResponse.ok) {
+          const subData = await subResponse.json();
+          setSubscription(subData);
+        }
+
+        // Fetch integrations
+        const integrationsResponse = await fetch(`${API_BASE_URL}/integrations/`, { headers });
+        if (integrationsResponse.ok) {
+          const integrationsData = await integrationsResponse.json();
+          setIntegrations(integrationsData.integrations || []);
+        }
+
+        // Fetch team members
+        const teamResponse = await fetch(`${API_BASE_URL}/organizations/me/members`, { headers });
+        if (teamResponse.ok) {
+          const teamData = await teamResponse.json();
+          setTeamMembers(teamData);
+        }
+
+      } catch (error) {
+        console.error('Error fetching settings data:', error);
+        showToast({
+          type: 'error',
+          title: 'Failed to load settings',
+          message: 'Could not fetch your settings data. Please refresh the page.',
+          autoClose: true,
+          duration: 5000
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [showToast]);
+
+  const handleOrganizationUpdate = async (updatedData: Partial<Organization>) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE_URL}/organizations/me`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedData),
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        setOrganization(updated);
+        showToast({
+          type: 'success',
+          title: 'Organization updated',
+          message: 'Your organization settings have been saved.',
+          autoClose: true,
+          duration: 3000
+        });
+      } else {
+        throw new Error('Failed to update organization');
+      }
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: 'Update failed',
+        message: 'Could not update organization settings.',
+        autoClose: true,
+        duration: 5000
+      });
+    }
+  };
+
+  const handleIntegrationToggle = async (integrationId: string) => {
+    try {
+      const integration = integrations.find(i => i.id === integrationId);
+      if (!integration) return;
+
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE_URL}/integrations/${integrationId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          is_active: !integration.is_active
+        }),
+      });
+
+      if (response.ok) {
+        setIntegrations(prev => prev.map(i => 
+          i.id === integrationId 
+            ? { ...i, is_active: !i.is_active }
+            : i
+        ));
+        
+        showToast({
+          type: 'success',
+          title: `Integration ${integration.is_active ? 'disabled' : 'enabled'}`,
+          message: `${integration.name} has been ${integration.is_active ? 'disconnected' : 'connected'}.`,
+          autoClose: true,
+          duration: 3000
+        });
+      }
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: 'Integration error',
+        message: 'Could not update integration status.',
+        autoClose: true,
+        duration: 5000
+      });
+    }
+  };
+
+  const getPlanDisplayName = (planType: string) => {
+    switch (planType) {
+      case 'free': return 'Free Plan';
+      case 'pro': return 'Professional Plan';
+      case 'plus': return 'Plus Plan';
+      case 'enterprise': return 'Enterprise Plan';
+      default: return 'Free Plan';
+    }
+  };
+
+  const getPlanPrice = (planType: string) => {
+    switch (planType) {
+      case 'free': return '$0';
+      case 'pro': return '$29/user/month';
+      case 'plus': return '$49/user/month';
+      case 'enterprise': return 'Contact sales';
+      default: return '$0';
+    }
   };
 
   const ProfileTab = () => (
@@ -113,7 +242,7 @@ const SettingsPage: React.FC = () => {
             <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
             <input
               type="text"
-              defaultValue={user?.full_name}
+              defaultValue={user?.full_name || ''}
               className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
             />
           </div>
@@ -121,7 +250,7 @@ const SettingsPage: React.FC = () => {
             <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
             <input
               type="email"
-              defaultValue={user?.email}
+              defaultValue={user?.email || ''}
               className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
             />
           </div>
@@ -152,6 +281,186 @@ const SettingsPage: React.FC = () => {
     </div>
   );
 
+  const OrganizationTab = () => (
+    <div className="space-y-6">
+      <div className="glass-card rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Organization Settings</h3>
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Organization Name</label>
+            <input
+              type="text"
+              defaultValue={organization?.name || ''}
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Organization Slug</label>
+            <div className="flex items-center space-x-3">
+              <span className="text-gray-400">offcall-ai.com/</span>
+              <input
+                type="text"
+                defaultValue={organization?.slug || ''}
+                className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Current Plan</label>
+            <div className="flex items-center justify-between p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+              <div>
+                <h4 className="text-white font-medium">
+                  {subscription ? getPlanDisplayName(subscription.plan_type) : 'Loading...'}
+                </h4>
+                <p className="text-blue-300 text-sm">
+                  {subscription ? getPlanPrice(subscription.plan_type) : 'Loading plan details...'}
+                  {subscription?.plan_type !== 'free' && ' • Unlimited incidents • Advanced integrations'}
+                </p>
+              </div>
+              <button 
+                onClick={() => window.location.href = '/pricing'}
+                className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 px-4 py-2 rounded-lg transition-colors font-medium"
+              >
+                {subscription?.plan_type === 'free' ? 'Upgrade' : 'Change Plan'}
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div className="mt-6">
+          <button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl transition-all duration-200 font-medium">
+            Save Changes
+          </button>
+        </div>
+      </div>
+
+      <div className="glass-card rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Team Members</h3>
+        {isLoading ? (
+          <div className="animate-pulse space-y-3">
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="h-16 bg-gray-700/50 rounded-lg"></div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {teamMembers.map((member) => (
+              <div key={member.id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-medium">
+                      {member.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="text-white font-medium">{member.full_name}</h4>
+                    <p className="text-gray-400 text-sm">{member.email} • {member.role}</p>
+                  </div>
+                </div>
+                <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-300">
+                  {member.role}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        <button className="w-full mt-4 bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-xl transition-colors font-medium flex items-center justify-center space-x-2">
+          <PlusIcon className="w-5 h-5" />
+          <span>Invite Team Member</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  const IntegrationsTab = () => (
+    <div className="space-y-6">
+      <div className="glass-card rounded-xl p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-2">Connected Services</h3>
+            <p className="text-gray-400 text-sm">Connect your monitoring tools and communication platforms</p>
+          </div>
+          <button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-4 py-2 rounded-xl transition-all duration-200 font-medium flex items-center space-x-2">
+            <PlusIcon className="w-4 h-4" />
+            <span>Add Integration</span>
+          </button>
+        </div>
+
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="animate-pulse bg-white/5 rounded-lg p-4 h-20"></div>
+            ))}
+          </div>
+        ) : integrations.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-400 mb-4">No integrations configured yet</p>
+            <button className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 px-4 py-2 rounded-lg transition-colors font-medium">
+              Set up your first integration
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {integrations.map((integration) => (
+              <div key={integration.id} className="bg-white/5 rounded-lg p-4 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="text-2xl">
+                    {integration.type === 'slack' && '💬'}
+                    {integration.type === 'datadog' && '📊'}
+                    {integration.type === 'email' && '📧'}
+                    {!['slack', 'datadog', 'email'].includes(integration.type) && '🔗'}
+                  </div>
+                  <div>
+                    <h4 className="text-white font-medium">{integration.name}</h4>
+                    <p className="text-gray-400 text-sm">{integration.type}</p>
+                    {integration.is_active && integration.last_sync_at && (
+                      <p className="text-green-400 text-xs mt-1">
+                        Last sync: {new Date(integration.last_sync_at).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${
+                    integration.is_active 
+                      ? 'bg-green-500/20 text-green-300' 
+                      : 'bg-gray-500/20 text-gray-300'
+                  }`}>
+                    {integration.is_active ? (
+                      <>
+                        <CheckIcon className="w-3 h-3" />
+                        <span>Connected</span>
+                      </>
+                    ) : (
+                      <>
+                        <XMarkIcon className="w-3 h-3" />
+                        <span>Disconnected</span>
+                      </>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => handleIntegrationToggle(integration.id)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      integration.is_active
+                        ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                        : 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'
+                    }`}
+                  >
+                    {integration.is_active ? 'Disconnect' : 'Connect'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Other tabs remain the same but with proper loading states...
   const NotificationsTab = () => (
     <div className="space-y-6">
       <div className="glass-card rounded-xl p-6">
@@ -180,239 +489,6 @@ const SettingsPage: React.FC = () => {
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="glass-card rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Advanced Settings</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
-            <div>
-              <h4 className="text-white font-medium">Critical Incidents Only</h4>
-              <p className="text-gray-400 text-sm">Only notify for critical severity incidents</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notificationSettings.criticalOnly}
-                onChange={(e) => setNotificationSettings(prev => ({ ...prev, criticalOnly: e.target.checked }))}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
-            <div>
-              <h4 className="text-white font-medium">Quiet Hours</h4>
-              <p className="text-gray-400 text-sm">Suppress non-critical notifications during specified hours</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notificationSettings.quietHours}
-                onChange={(e) => setNotificationSettings(prev => ({ ...prev, quietHours: e.target.checked }))}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-
-          {notificationSettings.quietHours && (
-            <div className="grid grid-cols-2 gap-4 ml-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Start Time</label>
-                <input
-                  type="time"
-                  value={notificationSettings.quietStart}
-                  onChange={(e) => setNotificationSettings(prev => ({ ...prev, quietStart: e.target.value }))}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">End Time</label>
-                <input
-                  type="time"
-                  value={notificationSettings.quietEnd}
-                  onChange={(e) => setNotificationSettings(prev => ({ ...prev, quietEnd: e.target.value }))}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
-  const IntegrationsTab = () => (
-    <div className="space-y-6">
-      <div className="glass-card rounded-xl p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-semibold text-white mb-2">Connected Services</h3>
-            <p className="text-gray-400 text-sm">Connect your monitoring tools and communication platforms</p>
-          </div>
-          <button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-4 py-2 rounded-xl transition-all duration-200 font-medium flex items-center space-x-2">
-            <PlusIcon className="w-4 h-4" />
-            <span>Add Integration</span>
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {integrations.map((integration) => (
-            <div key={integration.id} className="bg-white/5 rounded-lg p-4 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="text-2xl">{integration.icon}</div>
-                <div>
-                  <h4 className="text-white font-medium">{integration.name}</h4>
-                  <p className="text-gray-400 text-sm">{integration.description}</p>
-                  {integration.isConnected && integration.lastSync && (
-                    <p className="text-green-400 text-xs mt-1">Last sync: {integration.lastSync}</p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${
-                  integration.isConnected 
-                    ? 'bg-green-500/20 text-green-300' 
-                    : 'bg-gray-500/20 text-gray-300'
-                }`}>
-                  {integration.isConnected ? (
-                    <>
-                      <CheckIcon className="w-3 h-3" />
-                      <span>Connected</span>
-                    </>
-                  ) : (
-                    <>
-                      <XMarkIcon className="w-3 h-3" />
-                      <span>Disconnected</span>
-                    </>
-                  )}
-                </span>
-                <button
-                  onClick={() => handleIntegrationToggle(integration.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    integration.isConnected
-                      ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
-                      : 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'
-                  }`}
-                >
-                  {integration.isConnected ? 'Disconnect' : 'Connect'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="glass-card rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Webhook Configuration</h3>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Webhook URL</label>
-            <div className="flex space-x-3">
-              <input
-                type="text"
-                value="https://api.offcall-ai.com/webhooks/generic"
-                readOnly
-                className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-              />
-              <button className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 px-4 py-3 rounded-xl transition-colors font-medium">
-                Copy
-              </button>
-            </div>
-            <p className="text-gray-400 text-sm mt-2">Use this URL to send alerts from any monitoring tool</p>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Webhook Secret</label>
-            <div className="flex space-x-3">
-              <input
-                type="password"
-                value="sk_live_abc123xyz789"
-                readOnly
-                className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-              />
-              <button className="bg-green-500/20 text-green-300 hover:bg-green-500/30 px-4 py-3 rounded-xl transition-colors font-medium">
-                Regenerate
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const OrganizationTab = () => (
-    <div className="space-y-6">
-      <div className="glass-card rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Organization Settings</h3>
-        <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Organization Name</label>
-            <input
-              type="text"
-              defaultValue="Acme Corporation"
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Organization Slug</label>
-            <div className="flex items-center space-x-3">
-              <span className="text-gray-400">offcall-ai.com/</span>
-              <input
-                type="text"
-                defaultValue="acme-corp"
-                className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Current Plan</label>
-            <div className="flex items-center justify-between p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-              <div>
-                <h4 className="text-white font-medium">Professional Plan</h4>
-                <p className="text-blue-300 text-sm">$99/month • Unlimited incidents • Advanced integrations</p>
-              </div>
-              <button className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 px-4 py-2 rounded-lg transition-colors font-medium">
-                Upgrade
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <div className="mt-6">
-          <button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl transition-all duration-200 font-medium">
-            Save Changes
-          </button>
-        </div>
-      </div>
-
-      <div className="glass-card rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Team Members</h3>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-medium">BM</span>
-              </div>
-              <div>
-                <h4 className="text-white font-medium">{user?.full_name}</h4>
-                <p className="text-gray-400 text-sm">{user?.email} • Admin</p>
-              </div>
-            </div>
-            <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-300">
-              Owner
-            </span>
-          </div>
-        </div>
-        
-        <button className="w-full mt-4 bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-xl transition-colors font-medium flex items-center justify-center space-x-2">
-          <PlusIcon className="w-5 h-5" />
-          <span>Invite Team Member</span>
-        </button>
       </div>
     </div>
   );
@@ -469,31 +545,6 @@ const SettingsPage: React.FC = () => {
           </button>
         </div>
       </div>
-
-      <div className="glass-card rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">API Keys</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
-            <div>
-              <h4 className="text-white font-medium">Production API Key</h4>
-              <p className="text-gray-400 text-sm">sk_live_abc...xyz • Created 2 days ago</p>
-            </div>
-            <div className="flex space-x-2">
-              <button className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 px-3 py-2 rounded-lg transition-colors text-sm">
-                Copy
-              </button>
-              <button className="bg-red-500/20 text-red-300 hover:bg-red-500/30 px-3 py-2 rounded-lg transition-colors text-sm">
-                Revoke
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <button className="w-full mt-4 bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-xl transition-colors font-medium flex items-center justify-center space-x-2">
-          <PlusIcon className="w-5 h-5" />
-          <span>Generate New API Key</span>
-        </button>
-      </div>
     </div>
   );
 
@@ -509,9 +560,9 @@ const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
       {/* Header */}
-      <div className="glass-dark border-b border-white/10 p-6">
+      <div className="border-b border-gray-800/50 p-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center space-x-3">
             <CogIcon className="w-8 h-8 text-blue-400" />
@@ -528,7 +579,7 @@ const SettingsPage: React.FC = () => {
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar Navigation */}
           <div className="lg:w-64">
-            <div className="glass-card rounded-xl p-4">
+            <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-4">
               <nav className="space-y-2">
                 {tabs.map((tab) => (
                   <button

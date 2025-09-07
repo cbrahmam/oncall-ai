@@ -1,4 +1,4 @@
-// frontend/src/components/AuthPages.tsx - Complete fixed version
+// frontend/src/components/AuthPages.tsx - OAuth ROUTING FIXED
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -11,6 +11,8 @@ import {
   LockClosedIcon,
   BuildingOfficeIcon
 } from '@heroicons/react/24/outline';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
 interface AuthPagesProps {
   onLoginSuccess: () => void;
@@ -157,11 +159,37 @@ const AuthPages: React.FC<AuthPagesProps> = ({
     }
   };
 
-  // Handle OAuth login
-  const handleOAuthLogin = (provider: 'google' | 'microsoft' | 'github') => {
-    const baseUrl = process.env.REACT_APP_API_URL || 'https://offcallai.com';
-    const authUrl = `${baseUrl}/api/v1/auth/oauth/${provider}`;
-    window.location.href = authUrl;
+  // 🔧 FIXED: Handle OAuth login with CORRECT endpoint
+  const handleOAuthLogin = async (provider: 'google' | 'microsoft' | 'github') => {
+    try {
+      // Call the CORRECT backend endpoint: /oauth/authorize/{provider}
+      const response = await fetch(`${API_BASE_URL}/oauth/authorize/${provider}?redirect_uri=${encodeURIComponent(`${window.location.origin}/auth/oauth/callback`)}`, {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to initiate ${provider} OAuth`);
+      }
+
+      const data = await response.json();
+
+      // Store state and provider for callback verification
+      localStorage.setItem('oauth_state', data.state);
+      localStorage.setItem('oauth_provider', provider);
+
+      // Redirect to OAuth authorization URL
+      window.location.href = data.authorization_url;
+
+    } catch (error) {
+      console.error(`${provider} OAuth error:`, error);
+      showToast({
+        type: 'error',
+        title: 'OAuth Error',
+        message: `Failed to connect with ${provider}. Please try again.`,
+        autoClose: true,
+        duration: 5000
+      });
+    }
   };
 
   return (
@@ -300,7 +328,7 @@ const AuthPages: React.FC<AuthPagesProps> = ({
             </div>
           </div>
 
-          {/* Form */}
+          {/* Form - REST OF THE COMPONENT UNCHANGED */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Register fields */}
             {currentMode === 'register' && (

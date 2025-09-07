@@ -1,4 +1,4 @@
-// frontend/oncall-frontend/src/components/NotificationSettings.tsx
+// frontend/src/components/CleanNotificationSettings.tsx - SIMPLIFIED & MODERN
 import React, { useState } from 'react';
 import { 
   BellIcon,
@@ -8,7 +8,8 @@ import {
   MoonIcon,
   ClockIcon,
   ShieldCheckIcon,
-  DevicePhoneMobileIcon
+  DevicePhoneMobileIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline';
 import { useNotifications } from '../contexts/NotificationContext';
 
@@ -17,10 +18,32 @@ const NotificationSettings: React.FC = () => {
   const [permissionStatus, setPermissionStatus] = useState<string>(
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
   );
+  const [isTestingSound, setIsTestingSound] = useState(false);
 
   const handlePermissionRequest = async () => {
     const granted = await requestPermission();
     setPermissionStatus(granted ? 'granted' : 'denied');
+  };
+
+  const testNotificationSound = () => {
+    setIsTestingSound(true);
+    
+    // Play test sound
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+
+    setTimeout(() => setIsTestingSound(false), 300);
   };
 
   const ToggleSwitch: React.FC<{ 
@@ -30,7 +53,7 @@ const NotificationSettings: React.FC = () => {
   }> = ({ enabled, onChange, disabled = false }) => (
     <button
       onClick={() => !disabled && onChange(!enabled)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
         disabled ? 'opacity-50 cursor-not-allowed' : ''
       } ${
         enabled ? 'bg-blue-600' : 'bg-gray-600'
@@ -45,266 +68,234 @@ const NotificationSettings: React.FC = () => {
     </button>
   );
 
-  const TimeInput: React.FC<{
-    value: string;
-    onChange: (value: string) => void;
-    label: string;
-  }> = ({ value, onChange, label }) => (
-    <div className="flex items-center space-x-2">
-      <label className="text-sm text-gray-300 w-12">{label}</label>
-      <input
-        type="time"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-      />
+  const SettingRow: React.FC<{
+    icon: React.ReactNode;
+    title: string;
+    description: string;
+    enabled: boolean;
+    onChange: (enabled: boolean) => void;
+    disabled?: boolean;
+    children?: React.ReactNode;
+  }> = ({ icon, title, description, enabled, onChange, disabled, children }) => (
+    <div className="bg-gray-800/30 border border-gray-700/50 rounded-xl p-4 hover:bg-gray-800/50 transition-colors">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <div className="p-2 bg-gray-700/50 rounded-lg">
+            {icon}
+          </div>
+          <div>
+            <h3 className="text-white font-medium">{title}</h3>
+            <p className="text-gray-400 text-sm">{description}</p>
+          </div>
+        </div>
+        <ToggleSwitch enabled={enabled} onChange={onChange} disabled={disabled} />
+      </div>
+      {children && <div className="mt-4 pl-14">{children}</div>}
     </div>
   );
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-8">
+    <div className="max-w-4xl mx-auto p-6 space-y-8">
       {/* Header */}
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-white mb-2">Notification Preferences</h2>
-        <p className="text-gray-400">Customize how you receive alerts and updates</p>
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-bold text-white mb-2">Notification Settings</h2>
+        <p className="text-gray-400">Customize how you receive alerts and updates from OffCall AI</p>
       </div>
 
-      {/* Browser Permissions */}
-      <div className="glass-card rounded-xl p-6">
-        <div className="flex items-center space-x-3 mb-4">
-          <DevicePhoneMobileIcon className="w-6 h-6 text-blue-400" />
-          <h3 className="text-lg font-semibold text-white">Browser Notifications</h3>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-white">Enable Browser Notifications</p>
-              <p className="text-xs text-gray-400">Get instant notifications in your browser</p>
-            </div>
-            <ToggleSwitch
-              enabled={preferences.browserNotifications && permissionStatus === 'granted'}
-              onChange={(enabled) => {
-                if (enabled && permissionStatus !== 'granted') {
-                  handlePermissionRequest();
-                } else {
-                  updatePreferences({ browserNotifications: enabled });
-                }
-              }}
-            />
-          </div>
-
+      {/* Browser Notifications */}
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold text-white mb-4">Browser & Desktop</h3>
+        
+        <SettingRow
+          icon={<DevicePhoneMobileIcon className="w-5 h-5 text-blue-400" />}
+          title="Browser Notifications"
+          description="Get instant notifications in your browser and desktop"
+          enabled={preferences.browserNotifications && permissionStatus === 'granted'}
+          onChange={(enabled) => {
+            if (enabled && permissionStatus !== 'granted') {
+              handlePermissionRequest();
+            } else {
+              updatePreferences({ browserNotifications: enabled });
+            }
+          }}
+        >
           {permissionStatus === 'denied' && (
-            <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
               <p className="text-sm text-red-300">
-                Browser notifications are blocked. Please enable them in your browser settings.
+                Browser notifications are blocked. Please enable them in your browser settings and refresh the page.
               </p>
             </div>
           )}
 
           {permissionStatus === 'default' && (
-            <div className="p-3 bg-yellow-500/20 border border-yellow-500/30 rounded-lg">
+            <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
               <p className="text-sm text-yellow-300 mb-2">
-                Browser notifications permission is required for real-time alerts.
+                Enable browser notifications to receive real-time alerts for critical incidents.
               </p>
               <button
                 onClick={handlePermissionRequest}
-                className="px-3 py-1 bg-blue-500 text-white rounded text-sm font-medium hover:bg-blue-600 transition-colors"
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors"
               >
                 Enable Notifications
               </button>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Sound Settings */}
-      <div className="glass-card rounded-xl p-6">
-        <div className="flex items-center space-x-3 mb-4">
-          <SpeakerWaveIcon className="w-6 h-6 text-green-400" />
-          <h3 className="text-lg font-semibold text-white">Sound & Audio</h3>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-white">Notification Sounds</p>
-              <p className="text-xs text-gray-400">Play audio alerts for notifications</p>
+          {permissionStatus === 'granted' && preferences.browserNotifications && (
+            <div className="flex items-center space-x-2 text-green-300 text-sm">
+              <CheckIcon className="w-4 h-4" />
+              <span>Browser notifications are enabled</span>
             </div>
-            <ToggleSwitch
-              enabled={preferences.soundEnabled}
-              onChange={(enabled) => updatePreferences({ soundEnabled: enabled })}
-            />
-          </div>
-        </div>
+          )}
+        </SettingRow>
+
+        <SettingRow
+          icon={<SpeakerWaveIcon className="w-5 h-5 text-green-400" />}
+          title="Notification Sounds"
+          description="Play audio alerts for different types of notifications"
+          enabled={preferences.soundEnabled}
+          onChange={(enabled) => updatePreferences({ soundEnabled: enabled })}
+        >
+          <button
+            onClick={testNotificationSound}
+            disabled={!preferences.soundEnabled || isTestingSound}
+            className="px-4 py-2 bg-green-500/20 text-green-300 rounded-lg text-sm font-medium hover:bg-green-500/30 transition-colors disabled:opacity-50"
+          >
+            {isTestingSound ? 'Playing...' : 'Test Sound'}
+          </button>
+        </SettingRow>
       </div>
 
       {/* External Integrations */}
-      <div className="glass-card rounded-xl p-6">
-        <div className="flex items-center space-x-3 mb-4">
-          <ChatBubbleLeftRightIcon className="w-6 h-6 text-purple-400" />
-          <h3 className="text-lg font-semibold text-white">External Notifications</h3>
-        </div>
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold text-white mb-4">External Notifications</h3>
+        
+        <SettingRow
+          icon={<EnvelopeIcon className="w-5 h-5 text-blue-400" />}
+          title="Email Notifications"
+          description="Receive incident alerts and updates via email"
+          enabled={preferences.emailNotifications}
+          onChange={(enabled) => updatePreferences({ emailNotifications: enabled })}
+        />
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <EnvelopeIcon className="w-5 h-5 text-blue-400" />
-              <div>
-                <p className="text-sm font-medium text-white">Email Notifications</p>
-                <p className="text-xs text-gray-400">Receive updates via email</p>
-              </div>
-            </div>
-            <ToggleSwitch
-              enabled={preferences.emailNotifications}
-              onChange={(enabled) => updatePreferences({ emailNotifications: enabled })}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-5 h-5 bg-green-500 rounded text-white text-xs flex items-center justify-center font-bold">S</div>
-              <div>
-                <p className="text-sm font-medium text-white">Slack Notifications</p>
-                <p className="text-xs text-gray-400">Send alerts to Slack channels</p>
-              </div>
-            </div>
-            <ToggleSwitch
-              enabled={preferences.slackNotifications}
-              onChange={(enabled) => updatePreferences({ slackNotifications: enabled })}
-            />
-          </div>
-        </div>
+        <SettingRow
+          icon={<ChatBubbleLeftRightIcon className="w-5 h-5 text-green-400" />}
+          title="Slack Notifications"
+          description="Send alerts to your Slack channels and DMs"
+          enabled={preferences.slackNotifications}
+          onChange={(enabled) => updatePreferences({ slackNotifications: enabled })}
+        />
       </div>
 
-      {/* Incident Types */}
-      <div className="glass-card rounded-xl p-6">
-        <div className="flex items-center space-x-3 mb-4">
-          <BellIcon className="w-6 h-6 text-orange-400" />
-          <h3 className="text-lg font-semibold text-white">Incident Notifications</h3>
-        </div>
+      {/* Filtering & Priority */}
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold text-white mb-4">Filtering & Priority</h3>
+        
+        <SettingRow
+          icon={<BellIcon className="w-5 h-5 text-red-400" />}
+          title="Critical Incidents Only"
+          description="Only receive notifications for critical severity incidents"
+          enabled={preferences.criticalAlertsOnly}
+          onChange={(enabled) => updatePreferences({ criticalAlertsOnly: enabled })}
+        />
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-white">Incident Created</p>
-              <p className="text-xs text-gray-400">New incidents in your organization</p>
-            </div>
-            <ToggleSwitch
-              enabled={preferences.incidentCreated}
-              onChange={(enabled) => updatePreferences({ incidentCreated: enabled })}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-white">Incident Acknowledged</p>
-              <p className="text-xs text-gray-400">When incidents are acknowledged</p>
-            </div>
-            <ToggleSwitch
-              enabled={preferences.incidentAcknowledged}
-              onChange={(enabled) => updatePreferences({ incidentAcknowledged: enabled })}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-white">Incident Resolved</p>
-              <p className="text-xs text-gray-400">When incidents are resolved</p>
-            </div>
-            <ToggleSwitch
-              enabled={preferences.incidentResolved}
-              onChange={(enabled) => updatePreferences({ incidentResolved: enabled })}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-white">Critical Alerts Only</p>
-              <p className="text-xs text-gray-400">Only notify for critical severity incidents</p>
-            </div>
-            <ToggleSwitch
-              enabled={preferences.criticalAlertsOnly}
-              onChange={(enabled) => updatePreferences({ criticalAlertsOnly: enabled })}
-            />
-          </div>
-        </div>
+        <SettingRow
+          icon={<MoonIcon className="w-5 h-5 text-purple-400" />}
+          title="Do Not Disturb"
+          description="Silence all non-critical notifications"
+          enabled={preferences.doNotDisturb}
+          onChange={(enabled) => updatePreferences({ doNotDisturb: enabled })}
+        />
       </div>
 
-      {/* Do Not Disturb */}
-      <div className="glass-card rounded-xl p-6">
-        <div className="flex items-center space-x-3 mb-4">
-          <MoonIcon className="w-6 h-6 text-indigo-400" />
-          <h3 className="text-lg font-semibold text-white">Do Not Disturb</h3>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-white">Do Not Disturb Mode</p>
-              <p className="text-xs text-gray-400">Silence all non-critical notifications</p>
-            </div>
-            <ToggleSwitch
-              enabled={preferences.doNotDisturb}
-              onChange={(enabled) => updatePreferences({ doNotDisturb: enabled })}
-            />
-          </div>
-
-          <div className="border-t border-white/10 pt-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <ClockIcon className="w-5 h-5 text-blue-400" />
-                <div>
-                  <p className="text-sm font-medium text-white">Quiet Hours</p>
-                  <p className="text-xs text-gray-400">Automatically enable DND during these hours</p>
-                </div>
-              </div>
-              <ToggleSwitch
-                enabled={preferences.quietHours.enabled}
-                onChange={(enabled) => updatePreferences({ 
-                  quietHours: { ...preferences.quietHours, enabled }
-                })}
-              />
-            </div>
-
-            {preferences.quietHours.enabled && (
-              <div className="space-y-3 pl-8">
-                <TimeInput
-                  label="From"
+      {/* Quiet Hours */}
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold text-white mb-4">Quiet Hours</h3>
+        
+        <SettingRow
+          icon={<ClockIcon className="w-5 h-5 text-indigo-400" />}
+          title="Scheduled Quiet Hours"
+          description="Automatically enable DND during specified times"
+          enabled={preferences.quietHours.enabled}
+          onChange={(enabled) => updatePreferences({ 
+            quietHours: { ...preferences.quietHours, enabled }
+          })}
+        >
+          {preferences.quietHours.enabled && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Start Time</label>
+                <input
+                  type="time"
                   value={preferences.quietHours.start}
-                  onChange={(start) => updatePreferences({
-                    quietHours: { ...preferences.quietHours, start }
+                  onChange={(e) => updatePreferences({
+                    quietHours: { ...preferences.quietHours, start: e.target.value }
                   })}
-                />
-                <TimeInput
-                  label="To"
-                  value={preferences.quietHours.end}
-                  onChange={(end) => updatePreferences({
-                    quietHours: { ...preferences.quietHours, end }
-                  })}
+                  className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
                 />
               </div>
-            )}
-          </div>
-        </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">End Time</label>
+                <input
+                  type="time"
+                  value={preferences.quietHours.end}
+                  onChange={(e) => updatePreferences({
+                    quietHours: { ...preferences.quietHours, end: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                />
+              </div>
+            </div>
+          )}
+        </SettingRow>
       </div>
 
       {/* Security Notice */}
-      <div className="glass-card rounded-xl p-6 border border-green-500/30 bg-green-500/5">
-        <div className="flex items-start space-x-3">
-          <ShieldCheckIcon className="w-6 h-6 text-green-400 flex-shrink-0 mt-0.5" />
+      <div className="bg-gray-800/30 border border-green-500/30 rounded-xl p-6">
+        <div className="flex items-start space-x-4">
+          <div className="p-2 bg-green-500/20 rounded-lg">
+            <ShieldCheckIcon className="w-6 h-6 text-green-400" />
+          </div>
           <div>
-            <h3 className="text-lg font-semibold text-white mb-2">Security & Privacy</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">Privacy & Security</h3>
             <p className="text-sm text-gray-300 mb-3">
-              Your notification preferences are stored locally and encrypted. We never store sensitive 
-              data on our servers without your explicit consent.
+              Your notification preferences are stored securely and encrypted. We respect your privacy and never share your notification data.
             </p>
-            <div className="space-y-2 text-xs text-gray-400">
-              <p>• Browser notifications are handled by your browser's secure notification API</p>
-              <p>• Sound preferences are stored in your browser's local storage</p>
+            <div className="space-y-1 text-xs text-gray-400">
+              <p>• Browser notifications use your browser's secure notification API</p>
+              <p>• Preferences are stored locally in your browser</p>
               <p>• External integrations require separate authentication</p>
+              <p>• All data is encrypted in transit and at rest</p>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Test Notifications */}
+      <div className="bg-gray-800/30 border border-blue-500/30 rounded-xl p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-2">Test Your Settings</h3>
+            <p className="text-sm text-gray-400">
+              Send a test notification to verify your settings are working correctly.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              // Use the showToast function from context
+              const { showToast } = useNotifications();
+              showToast({
+                type: 'system',
+                title: 'Test Notification',
+                message: 'Your notification settings are working perfectly!',
+                autoClose: true,
+                duration: 4000
+              });
+            }}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors"
+          >
+            Send Test Notification
+          </button>
         </div>
       </div>
     </div>

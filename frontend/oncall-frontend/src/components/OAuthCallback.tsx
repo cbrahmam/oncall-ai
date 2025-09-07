@@ -37,7 +37,7 @@ const OAuthCallback: React.FC<OAuthCallbackProps> = ({ onComplete }) => {
         const storedProvider = localStorage.getItem('oauth_provider');
 
         if (!storedProvider) {
-          throw new Error('No OAuth provider information found');
+          throw new Error('OAuth session expired. Please try signing in again.');
         }
 
         // Verify state parameter for security
