@@ -1,0 +1,28 @@
+# Block source maps and build files
+<Files "*.map">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Block environment files
+<Files ".env*">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Block build artifacts
+<Files "*.json">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Block TypeScript files
+<Files "*.ts">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files "*.tsx">
+    Order allow,deny
+    Deny from all
+</Files>

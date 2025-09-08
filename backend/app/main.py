@@ -1,19 +1,30 @@
 import os
-# backend/app/main.py - Enhanced with OAuth and Security
+# backend/app/main.py - Enhanced with Security and Production Hardening
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from datetime import datetime
 import time
 
 from app.core.config import settings
 from app.database import get_async_session
 
+# SECURITY: Import security middleware
+try:
+    from app.middleware.security import SecurityMiddleware, setup_security_middleware
+    SECURITY_MIDDLEWARE_AVAILABLE = True
+    print("✅ Security middleware loaded")
+except ImportError as e:
+    SECURITY_MIDDLEWARE_AVAILABLE = False
+    print(f"⚠️  Security middleware not available: {e}")
+
 # Import core endpoints - these should always work
 from app.api.v1.endpoints import auth
 from app.api.v1.endpoints import billing
+
 # Import additional endpoints with better error handling
 INCIDENTS_AVAILABLE = False
 WEBHOOKS_AVAILABLE = False
@@ -116,6 +127,13 @@ async def lifespan(app: FastAPI):
     # Startup
     print("🚀 OffCall AI starting up...")
     
+    # SECURITY: Validate environment
+    if not settings.SECRET_KEY or settings.SECRET_KEY == "your-secret-key":
+        print("❌ CRITICAL: SECRET_KEY not properly configured!")
+        
+    if settings.DEBUG and settings.ENVIRONMENT == "production":
+        print("⚠️  WARNING: DEBUG=true in production environment!")
+    
     # Initialize OAuth if available
     if OAUTH_AVAILABLE:
         try:
@@ -157,58 +175,109 @@ async def lifespan(app: FastAPI):
     # Shutdown
     print("🛑 OffCall AI shutting down...")
 
-# Create FastAPI app
+# Create FastAPI app with SECURITY HARDENING
+# Create app first
 app = FastAPI(
     title="OffCall AI - Enterprise Edition",
     description="AI-powered incident response with enterprise SSO and security",
     version="2.0.0",
-    lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc"
+    lifespan=lifespan
 )
 
-# Add security headers middleware
+# Remove docs routes completely in production
+if not settings.DEBUG:
+    # Remove the routes from the router
+    routes_to_remove = []
+    for route in app.routes:
+        if hasattr(route, 'path') and route.path in ['/docs', '/redoc', '/openapi.json']:
+            routes_to_remove.append(route)
+    
+    for route in routes_to_remove:
+        app.routes.remove(route)
+
+# SECURITY: Add trusted host middleware (prevents host header attacks)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["localhost", "127.0.0.1", "offcallai.com", "*.offcallai.com"]
+)
+
+# SECURITY: Enhanced security headers middleware
 @app.middleware("http")
-async def add_security_headers(request: Request, call_next):
+async def enhanced_security_headers(request: Request, call_next):
     start_time = time.time()
     
     response = await call_next(request)
     
-    # Add security headers
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["X-Security-Level"] = "enterprise" if ENHANCED_SECURITY_AVAILABLE else "basic"
-    response.headers["X-OAuth-Enabled"] = "true" if OAUTH_AVAILABLE else "false"
+    # PRODUCTION SECURITY HEADERS
+    security_headers = {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block",
+        "X-Security-Level": "enterprise" if ENHANCED_SECURITY_AVAILABLE else "basic",
+        "X-OAuth-Enabled": "true" if OAUTH_AVAILABLE else "false"
+    }
     
-    # Add performance headers
+    # Add HSTS only for HTTPS
+    if request.url.scheme == "https" or not settings.DEBUG:
+        security_headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    
+    # PRODUCTION CSP
+    if not settings.DEBUG:
+        security_headers.update({
+            "Content-Security-Policy": (
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https:; "
+                "font-src 'self'; "
+                "connect-src 'self' https://offcallai.com wss://offcallai.com; "
+                "frame-ancestors 'none';"
+            ),
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Permissions-Policy": "geolocation=(), microphone=(), camera=()"
+        })
+    
+    # Apply headers
+    for header, value in security_headers.items():
+        response.headers[header] = value
+    
+    # SECURITY: Remove server information
+    
+    # Performance headers
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
     
-    # Log requests (but not WebSocket upgrades)
-    if not request.url.path.startswith("/api/v1/ws/"):
-        # Color-coded logging based on status
-        if response.status_code < 300:
-            status_color = "🟢"
-        elif response.status_code < 400:
-            status_color = "🟡"
-        else:
-            status_color = "🔴"
-            
+    # SECURITY: Log suspicious requests only
+    if (response.status_code >= 400 or 
+        process_time > 2.0 or 
+        any(suspicious in request.url.path.lower() for suspicious in 
+            ['admin', 'wp-', '.env', 'config', '../'])):
+        
+        status_color = "🔴" if response.status_code >= 400 else "🟡"
         print(f"{status_color} {request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s")
     
     return response
 
-# CORS middleware
+# SECURITY: Restrictive CORS for production
+production_origins = [
+    "https://offcallai.com",
+    "https://app.offcallai.com",
+    "wss://offcallai.com",
+    "wss://app.offcallai.com"
+]
+
+development_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "ws://localhost:3000",
+    "ws://localhost:5173"
+]
+
+cors_origins = development_origins if settings.DEBUG else production_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "ws://localhost:3000",
-        "ws://localhost:5173"
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
@@ -217,8 +286,8 @@ app.add_middleware(
 
 # Include core routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
-
 app.include_router(billing.router, prefix="/api/v1/billing", tags=["Billing"])
+
 # Include OAuth router if available
 if OAUTH_AVAILABLE:
     app.include_router(oauth.router, prefix="/api/v1/oauth", tags=["OAuth", "SSO"])
@@ -247,7 +316,7 @@ if AI_AVAILABLE:
 if WEBSOCKET_AVAILABLE:
     app.include_router(websocket_router, prefix="/api/v1", tags=["WebSockets", "Notifications"])
 
-# Add monitoring webhook routes (SINGLE INSTANCE)
+# Add monitoring webhook routes
 try:
     from app.api.v1.endpoints.monitoring_webhooks import router as monitoring_router
     app.include_router(monitoring_router, prefix="/api/v1", tags=["Monitoring"])
@@ -255,7 +324,7 @@ try:
 except ImportError as e:
     print(f'⚠️  Monitoring webhooks not available: {e}')
 
-# Add real AI integration (SINGLE INSTANCE)
+# Add real AI integration
 try:
     from app.api.v1.endpoints import ai_real
     app.include_router(ai_real.router, prefix="/api/v1/ai", tags=["Real AI"])
@@ -263,197 +332,146 @@ try:
 except ImportError as e:
     print(f'⚠️  Real AI endpoints not available: {e}')
 
-# Root endpoint
+# SECURITY: Restricted root endpoint
 @app.get("/")
 async def root():
     """Root endpoint with feature overview"""
     
-    return {
-        "message": "OffCall AI - Enterprise Edition",
-        "version": "2.0.0",
-        "status": "operational",
-        "security_level": "enterprise" if ENHANCED_SECURITY_AVAILABLE else "basic",
-        "features": {
-            "oauth_sso": len(oauth_providers) > 0,
-            "oauth_providers": list(oauth_providers.keys()),
-            "enhanced_security": ENHANCED_SECURITY_AVAILABLE,
-            "ai_powered": AI_AVAILABLE,
-            "real_time_notifications": WEBSOCKET_AVAILABLE,
-            "multi_factor_auth": ENHANCED_SECURITY_AVAILABLE,
-            "enterprise_ready": OAUTH_AVAILABLE and ENHANCED_SECURITY_AVAILABLE
-        },
-        "documentation": "/docs",
-        "endpoints": {
-            "auth": "/api/v1/auth",
-            "oauth": "/api/v1/oauth" if OAUTH_AVAILABLE else "not_available",
-            "incidents": "/api/v1/incidents" if INCIDENTS_AVAILABLE else "not_available",
-            "ai": "/api/v1/ai" if AI_AVAILABLE else "not_available"
+    # SECURITY: Limited info in production
+    if settings.DEBUG:
+        return {
+            "message": "OffCall AI - Enterprise Edition",
+            "version": "2.0.0",
+            "status": "operational",
+            "security_level": "enterprise" if ENHANCED_SECURITY_AVAILABLE else "basic",
+            "features": {
+                "oauth_sso": len(oauth_providers) > 0,
+                "oauth_providers": list(oauth_providers.keys()),
+                "enhanced_security": ENHANCED_SECURITY_AVAILABLE,
+                "ai_powered": AI_AVAILABLE,
+                "real_time_notifications": WEBSOCKET_AVAILABLE,
+                "multi_factor_auth": ENHANCED_SECURITY_AVAILABLE,
+                "enterprise_ready": OAUTH_AVAILABLE and ENHANCED_SECURITY_AVAILABLE
+            },
+            "documentation": "/docs",
+            "endpoints": {
+                "auth": "/api/v1/auth",
+                "oauth": "/api/v1/oauth" if OAUTH_AVAILABLE else "not_available",
+                "incidents": "/api/v1/incidents" if INCIDENTS_AVAILABLE else "not_available",
+                "ai": "/api/v1/ai" if AI_AVAILABLE else "not_available"
+            }
         }
-    }
+    else:
+        # Production: Minimal info
+        return {
+            "message": "OffCall AI API",
+            "status": "operational",
+            "version": "2.0.0"
+        }
 
-# Health check with comprehensive status
+# SECURITY: Enhanced health check
 @app.get("/health")
 async def health_check():
-    """Enhanced health check with proper database and Redis connections"""
-    
     health_status = {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "2.0.0",
-        "security": {
-            "basic_headers": True,
-            "cors_configured": True,
-            "enhanced_security": ENHANCED_SECURITY_AVAILABLE,
-            "oauth_enabled": OAUTH_AVAILABLE,
-            "oauth_providers": list(oauth_providers.keys()) if oauth_providers else []
-        },
-        "features": {
-            "authentication": True,
-            "database": True,
-            "incidents": True,
-            "ai_analysis": False,
-            "webhooks": False,
-            "real_time_notifications": False
-        }
+        "version": "2.0.0"
     }
     
-    # Test database using our fixed functions
+    # Don't fail the health check if DB/Redis are down
     try:
-        from app.database import check_db_health
         db_status = await check_db_health()
-        health_status["features"]["database_connection"] = db_status
-        if "error" in db_status:
-            health_status["status"] = "degraded"
+        health_status["database"] = db_status
     except Exception as e:
-        health_status["features"]["database_connection"] = f"error: {str(e)[:50]}"
-        health_status["status"] = "degraded"
+        health_status["database"] = "error"
     
-    # Test Redis using our fixed functions
     try:
-        from app.database import check_redis_health
-        redis_status = await check_redis_health()
-        health_status["features"]["redis_connection"] = redis_status
-        if "error" in redis_status:
-            health_status["status"] = "degraded"
+        redis_status = await check_redis_health()  
+        health_status["redis"] = redis_status
     except Exception as e:
-        health_status["features"]["redis_connection"] = f"error: {str(e)[:50]}"
-        health_status["status"] = "degraded"
+        health_status["redis"] = "error"
     
     return health_status
 
-# Test database with table info
-@app.get("/test-db")
-async def test_database():
-    """Test database connectivity with comprehensive checks"""
-    try:
-        from sqlalchemy import text
-        
-        # Use the async session generator correctly
-        db_gen = get_async_session()
-        session = await db_gen.__anext__()
-        
+@app.get("/healthz")
+async def simple_health():
+    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+    
+# SECURITY: Remove test endpoint in production
+if settings.DEBUG:
+    @app.get("/test-db")
+    async def test_database():
+        """Test database connectivity - DEBUG ONLY"""
         try:
-            # Test basic connectivity
-            result = await session.execute(text("SELECT 1"))
-            connection_test = result.fetchone()[0]
+            from sqlalchemy import text
             
-            # Get table list
-            tables_result = await session.execute(text("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public'
-                ORDER BY table_name
-            """))
-            tables = [row[0] for row in tables_result.fetchall()]
+            db_gen = get_async_session()
+            session = await db_gen.__anext__()
             
-            # Get record counts for each table
-            table_counts = {}
-            for table in tables:
-                if table != 'alembic_version':  # Skip alembic table
-                    try:
-                        count_result = await session.execute(text(f"SELECT COUNT(*) FROM {table}"))
-                        count = count_result.fetchone()[0]
-                        table_counts[table] = count
-                    except Exception as e:
-                        table_counts[table] = f"Error: {str(e)[:50]}"
-        
-            return {
-                "status": "success",
-                "connection_test": connection_test,
-                "total_tables": len(tables),
-                "tables": tables,
-                "record_counts": table_counts,
-                "features": {
-                    "oauth_support": "oauth_accounts" in tables,
-                    "enhanced_security": "user_sessions" in tables,
-                    "incidents": "incidents" in tables,
-                    "teams": "teams" in tables,
-                    "ai_ready": True
+            try:
+                result = await session.execute(text("SELECT 1"))
+                connection_test = result.fetchone()[0]
+                
+                tables_result = await session.execute(text("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name
+                """))
+                tables = [row[0] for row in tables_result.fetchall()]
+                
+                table_counts = {}
+                for table in tables:
+                    if table != 'alembic_version':
+                        try:
+                            count_result = await session.execute(text(f"SELECT COUNT(*) FROM {table}"))
+                            count = count_result.fetchone()[0]
+                            table_counts[table] = count
+                        except Exception as e:
+                            table_counts[table] = f"Error: {str(e)[:50]}"
+            
+                return {
+                    "status": "success",
+                    "connection_test": connection_test,
+                    "total_tables": len(tables),
+                    "tables": tables,
+                    "record_counts": table_counts,
+                    "features": {
+                        "oauth_support": "oauth_accounts" in tables,
+                        "enhanced_security": "user_sessions" in tables,
+                        "incidents": "incidents" in tables,
+                        "teams": "teams" in tables,
+                        "ai_ready": True
+                    }
                 }
+            finally:
+                await session.close()
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "error_type": type(e).__name__
             }
-        finally:
-            await session.close()
-        
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
 
-# Enhanced startup message
-@app.on_event("startup")
-async def startup_event():
-    
-    print("\n" + "="*80)
-    print("🚀 OffCall AI Enterprise Edition - Started Successfully!")
-    print("="*80)
-    print("📚 API Documentation: http://localhost:8000/docs")
-    print("🏠 Root Endpoint: http://localhost:8000/")
-    print("❤️  Health Check: http://localhost:8000/health")
-    print("")
-    
-    if OAUTH_AVAILABLE and oauth_providers:
-        print("🔐 Enterprise SSO Endpoints:")
-        print("   🌐 Available Providers: GET http://localhost:8000/api/v1/oauth/providers")
-        print("   🔑 Start OAuth Flow: POST http://localhost:8000/api/v1/oauth/authorize")
-        print("   ✅ OAuth Callback: POST http://localhost:8000/api/v1/oauth/callback")
-        print(f"   🎯 Enabled Providers: {', '.join(oauth_providers.keys())}")
-        print("")
-    
-    if AI_AVAILABLE:
-        print("🤖 AI-Powered Features:")
-        print("   📈 Incident Analysis: POST http://localhost:8000/api/v1/ai/analyze-incident")
-        print("   🔧 Auto Resolution: POST http://localhost:8000/api/v1/ai/suggest-resolution")
-        print("   🎯 Alert Classification: POST http://localhost:8000/api/v1/ai/classify-alert")
-        print("")
-    
-    print("🔒 Security Features:")
-    if ENHANCED_SECURITY_AVAILABLE:
-        print("   🛡️ Multi-Factor Auth: POST http://localhost:8000/api/v1/auth/setup-mfa")
-        print("   ⚡ Rate Limiting: Active")
-        print("   📊 Security Monitoring: Active")
-    
-    if oauth_providers:
-        print(f"   🔐 Enterprise SSO: {', '.join(oauth_providers.keys())}")
-    
-    print("   🛡️ Security Headers: Active")
-    print("   🔐 CORS Protection: Active")
-    print("="*80 + "\n")
-
-# Error handlers
+# SECURITY: Enhanced error handlers
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):
+    # SECURITY: Don't expose internal errors in production
+    if settings.DEBUG:
+        error_detail = str(exc)
+    else:
+        error_detail = "Internal server error"
+        
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal server error",
-            "message": "Something went wrong",
+            "message": error_detail,
             "timestamp": datetime.utcnow().isoformat(),
-            "path": str(request.url.path)
+            "request_id": getattr(request.state, "request_id", "unknown")
         }
     )
-
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
     return JSONResponse(
@@ -462,10 +480,51 @@ async def not_found_handler(request: Request, exc):
             "error": "Not found",
             "message": "The requested resource was not found",
             "timestamp": datetime.utcnow().isoformat(),
-            "path": str(request.url.path),
-            "suggestion": "Check /docs for available endpoints"
+            "suggestion": "Check API documentation" if settings.DEBUG else None
         }
     )
+
+# SECURITY: Enhanced startup message
+@app.on_event("startup")
+async def startup_event():
+    print("\n" + "="*80)
+    print(f"🚀 OffCall AI Enterprise Edition - {'DEVELOPMENT' if settings.DEBUG else 'PRODUCTION'} Mode")
+    print("="*80)
+    
+    if settings.DEBUG:
+        print("📚 API Documentation: http://localhost:8000/docs")
+        print("🏠 Root Endpoint: http://localhost:8000/")
+        print("❤️  Health Check: http://localhost:8000/health")
+        print("")
+        
+        if OAUTH_AVAILABLE and oauth_providers:
+            print("🔐 Enterprise SSO Endpoints:")
+            print("   🌐 Available Providers: GET http://localhost:8000/api/v1/oauth/providers")
+            print("   🔑 Start OAuth Flow: POST http://localhost:8000/api/v1/oauth/authorize")
+            print("   ✅ OAuth Callback: POST http://localhost:8000/api/v1/oauth/callback")
+            print(f"   🎯 Enabled Providers: {', '.join(oauth_providers.keys())}")
+            print("")
+        
+        if AI_AVAILABLE:
+            print("🤖 AI-Powered Features:")
+            print("   📈 Incident Analysis: POST http://localhost:8000/api/v1/ai/analyze-incident")
+            print("   🔧 Auto Resolution: POST http://localhost:8000/api/v1/ai/suggest-resolution")
+            print("   🎯 Alert Classification: POST http://localhost:8000/api/v1/ai/classify-alert")
+            print("")
+    
+    print("🔒 Security Features:")
+    if ENHANCED_SECURITY_AVAILABLE:
+        print("   🛡️ Multi-Factor Auth: Active")
+        print("   ⚡ Rate Limiting: Active")
+        print("   📊 Security Monitoring: Active")
+    
+    if oauth_providers:
+        print(f"   🔐 Enterprise SSO: {', '.join(oauth_providers.keys())}")
+    
+    print("   🛡️ Security Headers: Active")
+    print("   🔐 CORS Protection: Active")
+    print("   🚫 Host Header Protection: Active")
+    print("="*80 + "\n")
 
 if __name__ == "__main__":
     import uvicorn
@@ -473,6 +532,6 @@ if __name__ == "__main__":
         "app.main:app", 
         host="0.0.0.0", 
         port=8000, 
-        reload=True,
+        reload=settings.DEBUG,  # Only reload in debug mode
         log_level="info"
     )

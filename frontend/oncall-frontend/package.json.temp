@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "build": "GENERATE_SOURCEMAP=false react-scripts build",
+    "build:prod": "GENERATE_SOURCEMAP=false BUILD_PATH=dist react-scripts build"
+  }
+}

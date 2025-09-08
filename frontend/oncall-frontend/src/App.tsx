@@ -1,4 +1,4 @@
-// frontend/src/App.tsx - Updated with Teams completely removed
+// frontend/src/App.tsx - Updated with subscription enforcement and protected routes
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext';
@@ -12,20 +12,313 @@ import ToastNotifications from './components/ToastNotifications';
 import NotificationCenter from './components/NotificationCenter';
 import NotificationSettings from './components/NotificationSettings';
 import IncidentDetail from './components/IncidentDetail';
-import { BellIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import PricingPage from './components/PricingPage';
+import UpgradePage from './components/UpgradePage';
+import { BellIcon, Cog6ToothIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 
-// Removed 'teams' from the Page type
-type Page = 'landing' | 'auth' | 'dashboard' | 'settings' | 'profile' | 'notifications' | 'incident-detail' | 'oauth-callback';
+// Updated Page type to include new pages
+type Page = 'landing' | 'auth' | 'dashboard' | 'settings' | 'profile' | 'notifications' | 'incident-detail' | 'oauth-callback' | 'pricing' | 'upgrade' | 'plan-selection';
+
+// Subscription check hook
+const useSubscription = () => {
+  const { user } = useAuth();
+  const [subscription, setSubscription] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/v1/billing/subscription', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setSubscription(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch subscription:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSubscription();
+  }, [user]);
+
+  const hasValidSubscription = subscription?.active && ['pro', 'enterprise'].includes(subscription?.plan_type);
+  const isFreePlan = !subscription || subscription?.plan_type === 'free';
+
+  return { subscription, hasValidSubscription, isFreePlan, loading };
+};
+
+// Protected Route Component
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+  requireSubscription?: boolean;
+  allowedPlans?: string[];
+  onUpgradeRequired?: () => void;
+}
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
+  children, 
+  requireSubscription = false, 
+  allowedPlans = ['free', 'pro', 'enterprise'],
+  onUpgradeRequired 
+}) => {
+  const { isAuthenticated, user } = useAuth();
+  const { subscription, loading } = useSubscription();
+  const { showToast } = useNotifications();
+
+  // Show loading while checking subscription
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  // Check authentication
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl text-white mb-4">Authentication Required</h2>
+          <p className="text-gray-400">Please log in to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check subscription requirements
+  if (requireSubscription && (!subscription || !subscription.active)) {
+    showToast({
+      type: 'warning',
+      title: 'Subscription Required',
+      message: 'This feature requires an active subscription. Please upgrade your plan.',
+      autoClose: true,
+      duration: 5000
+    });
+
+    if (onUpgradeRequired) onUpgradeRequired();
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <LockClosedIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-4">Subscription Required</h2>
+          <p className="text-gray-400 mb-6">
+            This feature is available for Pro and Enterprise subscribers. Upgrade your plan to access advanced functionality.
+          </p>
+          <button
+            onClick={onUpgradeRequired}
+            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200"
+          >
+            Upgrade Now
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Check plan requirements
+  if (subscription && !allowedPlans.includes(subscription.plan_type)) {
+    showToast({
+      type: 'warning',
+      title: 'Plan Upgrade Required',
+      message: `This feature requires ${allowedPlans.filter(p => p !== 'free').join(' or ')} plan.`,
+      autoClose: true,
+      duration: 5000
+    });
+
+    if (onUpgradeRequired) onUpgradeRequired();
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <LockClosedIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-4">Plan Upgrade Required</h2>
+          <p className="text-gray-400 mb-6">
+            This feature requires {allowedPlans.filter(p => p !== 'free').join(' or ')} plan. 
+            Current plan: {subscription?.plan_type || 'Free'}
+          </p>
+          <button
+            onClick={onUpgradeRequired}
+            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200"
+          >
+            Upgrade Plan
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // All checks passed, render the protected content
+  return <>{children}</>;
+};
+
+// Plan Selection Component (shown after signup)
+const PlanSelection: React.FC<{ onPlanSelected: () => void }> = ({ onPlanSelected }) => {
+  const { showToast } = useNotifications();
+  const [loading, setLoading] = useState(false);
+
+  const handlePlanSelection = async (planType: string) => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      
+      if (planType === 'free') {
+        // For free plan, just mark as selected
+        onPlanSelected();
+        showToast({
+          type: 'success',
+          title: 'Plan Selected',
+          message: 'Welcome to OffCall AI! You can upgrade anytime from settings.',
+          autoClose: true,
+        });
+        return;
+      }
+
+      // For paid plans, redirect to Stripe
+      const response = await fetch('/api/v1/billing/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ plan_type: planType }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        window.location.href = data.checkout_url;
+      } else {
+        throw new Error('Failed to create checkout session');
+      }
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to process plan selection. Please try again.',
+        autoClose: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center p-4">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-white mb-4">Choose Your Plan</h1>
+          <p className="text-xl text-gray-400">Select the plan that best fits your needs to get started</p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-8">
+          {/* Free Plan */}
+          <div className="border border-gray-700 rounded-xl p-6 bg-gray-800/50">
+            <h3 className="text-xl font-bold text-white mb-2">Free</h3>
+            <p className="text-3xl font-bold text-white mb-4">$0<span className="text-sm text-gray-400">/month</span></p>
+            <ul className="text-gray-300 mb-6 space-y-2">
+              <li>• Up to 5 incidents/month</li>
+              <li>• Basic notifications</li>
+              <li>• Email support</li>
+              <li>• Community access</li>
+            </ul>
+            <button
+              onClick={() => handlePlanSelection('free')}
+              disabled={loading}
+              className="w-full bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-lg font-medium transition-colors"
+            >
+              Get Started Free
+            </button>
+          </div>
+
+          {/* Pro Plan */}
+          <div className="border border-blue-500 rounded-xl p-6 bg-blue-500/10 relative">
+            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+              <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm">Most Popular</span>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Pro</h3>
+            <p className="text-3xl font-bold text-white mb-4">$49<span className="text-sm text-gray-400">/month</span></p>
+            <ul className="text-gray-300 mb-6 space-y-2">
+              <li>• Unlimited incidents</li>
+              <li>• AI-powered insights</li>
+              <li>• Advanced integrations</li>
+              <li>• Priority support</li>
+              <li>• Custom alerting</li>
+            </ul>
+            <button
+              onClick={() => handlePlanSelection('pro')}
+              disabled={loading}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors"
+            >
+              Start Pro Trial
+            </button>
+          </div>
+
+          {/* Enterprise Plan */}
+          <div className="border border-gray-700 rounded-xl p-6 bg-gray-800/50">
+            <h3 className="text-xl font-bold text-white mb-2">Enterprise</h3>
+            <p className="text-3xl font-bold text-white mb-4">Custom</p>
+            <ul className="text-gray-300 mb-6 space-y-2">
+              <li>• Everything in Pro</li>
+              <li>• SSO integration</li>
+              <li>• Custom workflows</li>
+              <li>• Dedicated support</li>
+              <li>• SLA guarantees</li>
+            </ul>
+            <button
+              onClick={() => handlePlanSelection('enterprise')}
+              disabled={loading}
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-medium transition-colors"
+            >
+              Contact Sales
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
   const { unreadCount, showToast } = useNotifications();
+  const { subscription, isFreePlan } = useSubscription();
   const [currentPage, setCurrentPage] = useState<Page>('landing');
   const [currentIncidentId, setCurrentIncidentId] = useState<string | null>(null);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
+  const [hasSelectedPlan, setHasSelectedPlan] = useState(false);
 
-  // Simple client-side routing with proper navigation (teams removed)
+  // Check if user needs to select a plan (new users)
   useEffect(() => {
+    if (isAuthenticated && user && !subscription) {
+      // New user without subscription - show plan selection
+      const planSelected = localStorage.getItem(`plan_selected_${user.id}`);
+      if (!planSelected) {
+        setCurrentPage('plan-selection');
+      } else {
+        setHasSelectedPlan(true);
+      }
+    }
+  }, [isAuthenticated, user, subscription]);
+
+  // Simple client-side routing with proper navigation
+  useEffect(() => {
+    if (currentPage === 'plan-selection') return; // Don't override plan selection
+
     const path = window.location.pathname;
     const incidentMatch = path.match(/\/incidents\/([a-zA-Z0-9-]+)/);
     
@@ -37,6 +330,8 @@ const AppContent: React.FC = () => {
     } else if (path.includes('/settings')) setCurrentPage('settings');
     else if (path.includes('/profile')) setCurrentPage('profile');
     else if (path.includes('/notifications')) setCurrentPage('notifications');
+    else if (path.includes('/pricing')) setCurrentPage('pricing');
+    else if (path.includes('/upgrade')) setCurrentPage('upgrade');
     else if (path.includes('/app') || path.includes('/dashboard')) setCurrentPage('dashboard');
     else if (path.includes('/auth') || path.includes('/login') || path.includes('/register')) setCurrentPage('auth');
     else setCurrentPage('landing');
@@ -54,6 +349,8 @@ const AppContent: React.FC = () => {
       } else if (newPath.includes('/settings')) setCurrentPage('settings');
       else if (newPath.includes('/profile')) setCurrentPage('profile');
       else if (newPath.includes('/notifications')) setCurrentPage('notifications');
+      else if (newPath.includes('/pricing')) setCurrentPage('pricing');
+      else if (newPath.includes('/upgrade')) setCurrentPage('upgrade');
       else if (newPath.includes('/app') || newPath.includes('/dashboard')) setCurrentPage('dashboard');
       else if (newPath.includes('/auth') || newPath.includes('/login') || newPath.includes('/register')) setCurrentPage('auth');
       else setCurrentPage('landing');
@@ -61,7 +358,7 @@ const AppContent: React.FC = () => {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [currentPage]);
 
   // Welcome notification for authenticated users (only show once)
   useEffect(() => {
@@ -93,6 +390,8 @@ const AppContent: React.FC = () => {
       else if (page === 'auth') url = '/auth';
       else if (page === 'landing') url = '/';
       else if (page === 'oauth-callback') url = '/auth/oauth/callback';
+      else if (page === 'pricing') url = '/pricing';
+      else if (page === 'upgrade') url = '/upgrade';
       else url = `/${page}`;
       window.history.pushState(null, '', url);
     }
@@ -103,7 +402,21 @@ const AppContent: React.FC = () => {
     navigate('auth');
   };
 
-  // Navigation Header Component for authenticated users (teams removed)
+  // Handle plan selection completion
+  const handlePlanSelected = () => {
+    if (user) {
+      localStorage.setItem(`plan_selected_${user.id}`, 'true');
+      setHasSelectedPlan(true);
+      navigate('dashboard');
+    }
+  };
+
+  // Handle upgrade requirement
+  const handleUpgradeRequired = () => {
+    navigate('pricing');
+  };
+
+  // Navigation Header Component for authenticated users with subscription indicators
   const NavigationHeader = () => (
     <nav className="backdrop-blur-xl border-b border-gray-800/50 sticky top-0 z-30 bg-black/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -121,9 +434,22 @@ const AppContent: React.FC = () => {
             >
               OffCall AI
             </button>
+            
+            {/* Plan Badge */}
+            {subscription && (
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                subscription.plan_type === 'free' 
+                  ? 'bg-gray-700 text-gray-300' 
+                  : subscription.plan_type === 'pro'
+                  ? 'bg-blue-500/20 text-blue-300'
+                  : 'bg-purple-500/20 text-purple-300'
+              }`}>
+                {subscription.plan_type.toUpperCase()}
+              </span>
+            )}
           </div>
 
-          {/* Navigation Links - TEAMS REMOVED */}
+          {/* Navigation Links */}
           <div className="hidden md:flex items-center space-x-8">
             <button
               onClick={() => navigate('dashboard')}
@@ -141,6 +467,16 @@ const AppContent: React.FC = () => {
             >
               Settings
             </button>
+            
+            {/* Upgrade Button for Free Plan */}
+            {isFreePlan && (
+              <button
+                onClick={() => navigate('pricing')}
+                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+              >
+                Upgrade
+              </button>
+            )}
           </div>
 
           {/* User Actions */}
@@ -227,6 +563,11 @@ const AppContent: React.FC = () => {
 
   // Render current page
   const renderCurrentPage = () => {
+    // Plan selection (for new users)
+    if (currentPage === 'plan-selection') {
+      return <PlanSelection onPlanSelected={handlePlanSelected} />;
+    }
+
     // OAuth callback page (always accessible)
     if (currentPage === 'oauth-callback') {
       return <OAuthCallback onComplete={() => navigate('dashboard')} />;
@@ -235,6 +576,11 @@ const AppContent: React.FC = () => {
     // Landing page (only for non-authenticated users)
     if (currentPage === 'landing') {
       return <LandingPage onNavigateToAuth={handleNavigateToAuth} />;
+    }
+
+    // Pricing page (accessible to all)
+    if (currentPage === 'pricing') {
+      return <PricingPage onPlanSelected={handlePlanSelected} />;
     }
 
     // Auth pages (login/register)
@@ -261,35 +607,69 @@ const AppContent: React.FC = () => {
       );
     }
 
-    // Authenticated user pages (TEAMS REMOVED)
+    // Authenticated user pages with subscription protection
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard onNavigateToIncident={(id) => navigate('incident-detail', id)} />;
+        return (
+          <ProtectedRoute>
+            <Dashboard onNavigateToIncident={(id) => navigate('incident-detail', id)} />
+          </ProtectedRoute>
+        );
+
       case 'settings':
-        return <SettingsPage />;
+        return (
+          <ProtectedRoute>
+            <SettingsPage />
+          </ProtectedRoute>
+        );
+
       case 'profile':
-        return <UserProfile />;
+        return (
+          <ProtectedRoute>
+            <UserProfile />
+          </ProtectedRoute>
+        );
+
       case 'notifications':
-        return <NotificationSettings />;
+        return (
+          <ProtectedRoute 
+            requireSubscription 
+            allowedPlans={['pro', 'enterprise']}
+            onUpgradeRequired={handleUpgradeRequired}
+          >
+            <NotificationSettings />
+          </ProtectedRoute>
+        );
+
       case 'incident-detail':
         return currentIncidentId ? (
-          <IncidentDetail 
-            incidentId={currentIncidentId} 
-            onBack={() => navigate('dashboard')} 
-          />
+          <ProtectedRoute>
+            <IncidentDetail 
+              incidentId={currentIncidentId} 
+              onBack={() => navigate('dashboard')} 
+            />
+          </ProtectedRoute>
         ) : null;
+
+      case 'upgrade':
+        return <UpgradePage onPlanSelected={handlePlanSelected} />;
+
       default:
-        return <Dashboard onNavigateToIncident={(id) => navigate('incident-detail', id)} />;
+        return (
+          <ProtectedRoute>
+            <Dashboard onNavigateToIncident={(id) => navigate('incident-detail', id)} />
+          </ProtectedRoute>
+        );
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
       {/* Show navigation header only for authenticated users and not on landing/auth pages */}
-      {isAuthenticated && currentPage !== 'landing' && currentPage !== 'auth' && <NavigationHeader />}
+      {isAuthenticated && currentPage !== 'landing' && currentPage !== 'auth' && currentPage !== 'plan-selection' && <NavigationHeader />}
       
       {/* Main content */}
-      <main className={isAuthenticated && currentPage !== 'landing' && currentPage !== 'auth' ? '' : 'min-h-screen'}>
+      <main className={isAuthenticated && currentPage !== 'landing' && currentPage !== 'auth' && currentPage !== 'plan-selection' ? '' : 'min-h-screen'}>
         {renderCurrentPage()}
       </main>
 
