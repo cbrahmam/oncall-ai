@@ -27,7 +27,8 @@ class Organization(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relationships
+    # Relationships - COMMENTED OUT API KEYS FOR NOW
+    # api_keys = relationship("APIKey", back_populates="organization")
     incidents = relationship("Incident", back_populates="organization")
     alerts = relationship("Alert", back_populates="organization") 
     escalation_policies = relationship("EscalationPolicy", back_populates="organization")

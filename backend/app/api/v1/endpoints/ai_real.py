@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 import time
 from typing import Dict, Any
-
+from app.core.deps import get_current_user
+from app.models.user import User
 from app.database import get_async_session as get_db
 from app.services.real_ai_service import RealAIService
 
@@ -27,20 +28,23 @@ async def ai_health_check():
 
 @router.post("/analyze-incident")
 async def analyze_incident_real(
-    request_data: Dict[str, Any]
+    request_data: Dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)  # Changed from get_async_session to get_db to match existing import
 ):
-    """Analyze incident with real Claude and Gemini APIs"""
+    """Analyze incident with real Claude and Gemini APIs using BYOK"""
     
     start_time = time.time()
     
     try:
-        ai_service = RealAIService()
+        # Pass DB session and organization ID for BYOK
+        ai_service = RealAIService(db=db, organization_id=str(current_user.organization_id))
         
         incident_data = request_data.get('incident_data', {})
         if not incident_data:
             raise HTTPException(status_code=400, detail="incident_data required")
         
-        # Get multi-AI analysis
+        # Get multi-AI analysis with BYOK
         analysis = await ai_service.multi_ai_analysis(incident_data)
         
         processing_time = time.time() - start_time

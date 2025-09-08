@@ -4,6 +4,7 @@ import {
   CogIcon,
   UserIcon,
   BellIcon,
+  KeyIcon,
   LinkIcon,
   ShieldCheckIcon,
   BuildingOfficeIcon,
@@ -13,7 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
-
+import APIKeyManagement from './APIKeyManagement';
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
 interface Integration {
@@ -48,6 +49,7 @@ interface Subscription {
   plan_type: string;
   status: string;
 }
+type TabId = 'profile' | 'notifications' | 'api-keys' | 'integrations' | 'organization' | 'security'; // ADD 'api-keys'
 
 const SettingsPage: React.FC = () => {
   const { user } = useAuth();
@@ -74,6 +76,7 @@ const SettingsPage: React.FC = () => {
   const tabs = [
     { id: 'profile', name: 'Profile', icon: UserIcon },
     { id: 'notifications', name: 'Notifications', icon: BellIcon },
+    { id: 'api-keys' as TabId, name: 'API Keys', icon: KeyIcon },
     { id: 'integrations', name: 'Integrations', icon: LinkIcon },
     { id: 'organization', name: 'Organization', icon: BuildingOfficeIcon },
     { id: 'security', name: 'Security', icon: ShieldCheckIcon },
@@ -552,6 +555,7 @@ const SettingsPage: React.FC = () => {
     switch (activeTab) {
       case 'profile': return <ProfileTab />;
       case 'notifications': return <NotificationsTab />;
+      case 'api-keys': return <APIKeyManagement />; // ADD THIS LINE
       case 'integrations': return <IntegrationsTab />;
       case 'organization': return <OrganizationTab />;
       case 'security': return <SecurityTab />;

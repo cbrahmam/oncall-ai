@@ -1,18 +1,18 @@
-# Clean alembic/env.py - Remove any model definitions
+# backend/alembic/env.py - UPDATED VERSION
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
 import os
 import sys
-from app.models.oauth_account import OAuthAccount
+
 # Add the backend directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import Base from database.py
 from app.database import Base
 
-# Import all models (ONLY imports, no class definitions)
+# Import ALL models (ONLY imports, no class definitions)
 from app.models.organization import Organization
 from app.models.user import User
 from app.models.incident import Incident
@@ -21,6 +21,9 @@ from app.models.escalation_policy import EscalationPolicy
 from app.models.integration import Integration
 from app.models.runbook import Runbook
 from app.models.audit_log import AuditLog
+from app.models.oauth_account import OAuthAccount
+# ADD THIS NEW IMPORT:
+from app.models.api_keys import APIKey
 
 # this is the Alembic Config object
 config = context.config

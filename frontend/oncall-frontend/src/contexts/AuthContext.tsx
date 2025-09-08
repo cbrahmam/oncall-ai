@@ -1,8 +1,7 @@
-// frontend/src/contexts/AuthContext.tsx - Fixed with proper types
+// frontend/src/contexts/AuthContext.tsx - Fixed with all required properties
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || '/api/v1';
-
 
 interface User {
   id: string;
@@ -13,6 +12,19 @@ interface User {
   organization_name?: string;
   is_verified?: boolean;
   created_at?: string;
+  // Add missing properties that ProtectedRoute expects
+  email_verified_at?: string | null;
+  mfa_enabled?: boolean;
+  mfa_verified_session?: boolean;
+}
+
+interface Subscription {
+  id: string;
+  plan_type: 'free' | 'pro' | 'plus' | 'enterprise';
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  expires_at?: string;
 }
 
 interface AuthContextType {
@@ -21,6 +33,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  // Add missing properties that App.tsx and ProtectedRoute expect
+  subscription: Subscription | null;
+  loading: boolean; // Alias for isLoading to match ProtectedRoute expectations
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName: string, organizationName: string) => Promise<void>;
   logout: () => void;
@@ -40,42 +55,76 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
 
   const isAuthenticated = !!token && !!user;
 
   // Initialize auth state from localStorage
   useEffect(() => {
     const initializeAuth = async () => {
-      const savedToken = localStorage.getItem('access_token');
-      if (savedToken) {
-        try {
-          // Verify token and get user info
-          const response = await fetch(`${API_BASE_URL}/auth/me`, {
-            headers: {
-              'Authorization': `Bearer ${savedToken}`,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (response.ok) {
-            const userData = await response.json();
-            setToken(savedToken);
-            setUser(userData);
-          } else {
-            // Token is invalid, clear it
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-          }
-        } catch (error) {
-          console.error('Auth initialization error:', error);
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-        }
+      const storedToken = localStorage.getItem('access_token');
+      if (storedToken) {
+        setToken(storedToken);
+        await fetchUserProfile(storedToken);
       }
     };
 
     initializeAuth();
   }, []);
+
+  // Fetch user profile
+  const fetchUserProfile = async (authToken: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/me`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+        
+        // Also fetch subscription data
+        await fetchSubscription(authToken);
+      } else {
+        // Token might be invalid
+        localStorage.removeItem('access_token');
+        setToken(null);
+        setUser(null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user profile:', error);
+    }
+  };
+
+  // Fetch subscription data
+  const fetchSubscription = async (authToken: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/billing/subscription`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const subscriptionData = await response.json();
+        setSubscription(subscriptionData);
+      }
+    } catch (error) {
+      console.error('Failed to fetch subscription:', error);
+      // Set default free subscription if API call fails
+      setSubscription({
+        id: 'default-free',
+        plan_type: 'free',
+        active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    }
+  };
 
   const login = async (email: string, password: string): Promise<void> => {
     setIsLoading(true);
@@ -105,6 +154,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Update state
       setToken(data.access_token);
       setUser(data.user);
+      
+      // Fetch subscription data
+      await fetchSubscription(data.access_token);
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed';
@@ -154,6 +206,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setToken(data.access_token);
       setUser(data.user);
       
+      // Set default free subscription for new users
+      setSubscription({
+        id: 'new-user-free',
+        plan_type: 'free',
+        active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Registration failed';
       setError(errorMessage);
@@ -171,6 +232,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Clear state
     setToken(null);
     setUser(null);
+    setSubscription(null);
     setError(null);
     
     // Redirect to landing page
@@ -200,6 +262,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isAuthenticated,
     isLoading,
     error,
+    subscription,
+    loading: isLoading, // Alias for ProtectedRoute compatibility
     login,
     register,
     logout,

@@ -1,11 +1,11 @@
-// frontend/src/contexts/ModernNotificationContext.tsx - COMPLETE API INTEGRATION
+// frontend/src/contexts/NotificationContext.tsx - Fixed with proper interface for all required properties
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
 interface Notification {
   id: string;
-  type: 'incident' | 'alert' | 'system' | 'success' | 'warning' | 'error';
+  type: 'incident' | 'alert' | 'system' | 'success' | 'warning' | 'error' | 'info'; // Added 'info' type
   title: string;
   message: string;
   severity?: 'critical' | 'high' | 'medium' | 'low';
@@ -96,240 +96,138 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // WebSocket connection for real-time notifications
+  // Initialize WebSocket connection
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
+    // Note: WebSocket URL would be ws:// in development, wss:// in production
     const wsUrl = `ws://localhost:8000/api/v1/ws/notifications?token=${token}`;
-    const ws = new WebSocket(wsUrl);
+    
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
 
-    ws.onopen = () => {
-      setIsConnected(true);
-      console.log('Notification WebSocket connected');
-    };
+      ws.onopen = () => {
+        setIsConnected(true);
+        console.log('Notification WebSocket connected');
+      };
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'notification') {
-          const notification: Notification = {
-            ...data.notification,
-            autoClose: data.notification.severity !== 'critical',
-            duration: data.notification.severity === 'critical' ? undefined : 5000
-          };
-          
-          // Add to both lists
-          setNotifications(prev => [notification, ...prev]);
-          setToastNotifications(prev => [notification, ...prev]);
-          
-          // Update stats
-          setStats(prev => ({
-            ...prev,
-            total_count: prev.total_count + 1,
-            unread_count: prev.unread_count + 1,
-            [`${notification.type}s_count`]: prev[`${notification.type}s_count` as keyof NotificationStats] + 1
-          }));
-
-          // Show browser notification if enabled
-          showBrowserNotification(notification);
-          
-          // Play sound if enabled
-          if (preferences.soundEnabled) {
-            playNotificationSound(notification.severity || 'medium');
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'notification') {
+            const notification: Notification = {
+              ...data.notification,
+              metadata: data.notification.metadata || {},
+              autoClose: data.notification.severity !== 'critical',
+              duration: data.notification.severity === 'critical' ? 0 : 5000
+            };
+            
+            // Add to notifications list
+            setNotifications(prev => [notification, ...prev]);
+            
+            // Show as toast
+            setToastNotifications(prev => [...prev, notification]);
+            
+            // Update stats
+            setStats(prev => ({
+              ...prev,
+              total_count: prev.total_count + 1,
+              unread_count: prev.unread_count + 1
+            }));
+            
+            // Show browser notification if enabled
+            if (preferences.browserNotifications && 'Notification' in window && Notification.permission === 'granted') {
+              new Notification(notification.title, {
+                body: notification.message,
+                icon: '/favicon.ico'
+              });
+            }
           }
+        } catch (error) {
+          console.error('Failed to parse WebSocket message:', error);
         }
-      } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
-      }
-    };
+      };
 
-    ws.onclose = () => {
-      setIsConnected(false);
-      console.log('Notification WebSocket disconnected');
-    };
+      ws.onclose = () => {
+        setIsConnected(false);
+        console.log('Notification WebSocket disconnected');
+      };
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setIsConnected(false);
-    };
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setIsConnected(false);
+      };
+    } catch (error) {
+      console.error('Failed to create WebSocket connection:', error);
+    }
 
     return () => {
-      ws.close();
+      if (ws) {
+        ws.close();
+      }
     };
-  }, [preferences.soundEnabled]);
+  }, [preferences.browserNotifications]);
 
-  // Fetch initial notifications
+  // Load initial notifications
+  useEffect(() => {
+    refreshNotifications();
+  }, []);
+
   const refreshNotifications = useCallback(async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      if (!token) return;
-
-      // Fetch notifications
-      const notificationsResponse = await fetch(`${API_BASE_URL}/notifications/?limit=50`, {
+      const response = await fetch(`${API_BASE_URL}/notifications`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
 
-      if (notificationsResponse.ok) {
-        const notificationsData = await notificationsResponse.json();
-        setNotifications(notificationsData);
-        
-        // Show only unread notifications as toasts (limit to 3)
-        const unreadToasts = notificationsData
-          .filter((n: Notification) => !n.read)
-          .slice(0, 3)
-          .map((n: Notification) => ({
-            ...n,
-            autoClose: n.severity !== 'critical',
-            duration: n.severity === 'critical' ? undefined : 5000
-          }));
-        setToastNotifications(unreadToasts);
-      }
-
-      // Fetch stats
-      const statsResponse = await fetch(`${API_BASE_URL}/notifications/stats`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats(statsData);
+      if (response.ok) {
+        const data = await response.json();
+        setNotifications(data.notifications || []);
+        setStats(data.stats || stats);
       }
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      console.error('Failed to fetch notifications:', error);
     } finally {
       setIsLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    refreshNotifications();
-  }, [refreshNotifications]);
-
-  // Save preferences to localStorage
-  useEffect(() => {
-    localStorage.setItem('notification_preferences', JSON.stringify(preferences));
-  }, [preferences]);
-
-  const showBrowserNotification = useCallback((notification: Notification) => {
-    if (!preferences.browserNotifications || Notification.permission !== 'granted') return;
-    if (preferences.doNotDisturb && isQuietHours()) return;
-    if (preferences.criticalAlertsOnly && notification.severity !== 'critical') return;
-
-    const browserNotification = new Notification(notification.title, {
-      body: notification.message,
-      icon: '/favicon.ico',
-      tag: notification.id,
-      requireInteraction: notification.severity === 'critical'
-    });
-
-    browserNotification.onclick = () => {
-      window.focus();
-      if (notification.action_url) {
-        window.location.href = notification.action_url;
-      } else if (notification.incident_id) {
-        window.location.href = `/incidents/${notification.incident_id}`;
-      }
-      browserNotification.close();
-    };
-
-    if (notification.autoClose !== false) {
-      setTimeout(() => {
-        browserNotification.close();
-      }, notification.duration || 5000);
-    }
-  }, [preferences.browserNotifications, preferences.doNotDisturb, preferences.criticalAlertsOnly]);
-
-  const playNotificationSound = useCallback((severity: string) => {
-    if (!preferences.soundEnabled) return;
-    if (preferences.doNotDisturb && isQuietHours()) return;
-
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    const frequencies = {
-      critical: [800, 600, 800],
-      high: [600, 400],
-      medium: [400],
-      low: [300]
-    };
-
-    const pattern = frequencies[severity as keyof typeof frequencies] || frequencies.medium;
-    
-    let time = audioContext.currentTime;
-    pattern.forEach((freq) => {
-      oscillator.frequency.setValueAtTime(freq, time);
-      gainNode.gain.setValueAtTime(0.1, time);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
-      time += 0.3;
-    });
-
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(time);
-  }, [preferences.soundEnabled, preferences.doNotDisturb]);
-
-  const isQuietHours = useCallback(() => {
-    if (!preferences.quietHours.enabled) return false;
-    
-    const now = new Date();
-    const currentTime = now.getHours() * 60 + now.getMinutes();
-    const [startHour, startMin] = preferences.quietHours.start.split(':').map(Number);
-    const [endHour, endMin] = preferences.quietHours.end.split(':').map(Number);
-    const startTime = startHour * 60 + startMin;
-    const endTime = endHour * 60 + endMin;
-
-    if (startTime <= endTime) {
-      return currentTime >= startTime && currentTime <= endTime;
-    } else {
-      return currentTime >= startTime || currentTime <= endTime;
-    }
-  }, [preferences.quietHours]);
+  }, [stats]);
 
   const showToast = useCallback((notificationData: Omit<Notification, 'id' | 'created_at' | 'read' | 'metadata'>) => {
     const notification: Notification = {
-      ...notificationData,
       id: `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       created_at: new Date().toISOString(),
       read: false,
       metadata: {},
       autoClose: notificationData.autoClose !== false,
-      duration: notificationData.duration || 5000
+      duration: notificationData.duration || 5000,
+      ...notificationData
     };
 
-    setToastNotifications(prev => [notification, ...prev.slice(0, 2)]); // Keep max 3 toasts
+    setToastNotifications(prev => [...prev, notification]);
 
-    // Auto-remove toast notifications
+    // Auto remove toast
     if (notification.autoClose) {
       setTimeout(() => {
-        setToastNotifications(prev => prev.filter(n => n.id !== notification.id));
+        setToastNotifications(prev => prev.filter(t => t.id !== notification.id));
       }, notification.duration);
     }
-
-    // Show browser notification
-    showBrowserNotification(notification);
-
-    // Play sound
-    if (notification.severity && preferences.soundEnabled) {
-      playNotificationSound(notification.severity);
-    }
-  }, [showBrowserNotification, preferences.soundEnabled]);
+  }, []);
 
   const markAsRead = useCallback(async (id: string) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+
     try {
-      const token = localStorage.getItem('access_token');
       const response = await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -340,18 +238,23 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setNotifications(prev => 
           prev.map(n => n.id === id ? { ...n, read: true, read_at: new Date().toISOString() } : n)
         );
-        setStats(prev => ({ ...prev, unread_count: Math.max(0, prev.unread_count - 1) }));
+        setStats(prev => ({
+          ...prev,
+          unread_count: Math.max(0, prev.unread_count - 1)
+        }));
       }
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error('Failed to mark notification as read:', error);
     }
   }, []);
 
   const markAllAsRead = useCallback(async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`${API_BASE_URL}/notifications/mark-all-read`, {
-        method: 'PATCH',
+      const response = await fetch(`${API_BASE_URL}/notifications/read-all`, {
+        method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -359,17 +262,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
 
       if (response.ok) {
-        setNotifications(prev => prev.map(n => ({ ...n, read: true, read_at: new Date().toISOString() })));
-        setStats(prev => ({ ...prev, unread_count: 0 }));
+        const readAt = new Date().toISOString();
+        setNotifications(prev => 
+          prev.map(n => ({ ...n, read: true, read_at: readAt }))
+        );
+        setStats(prev => ({
+          ...prev,
+          unread_count: 0
+        }));
       }
     } catch (error) {
-      console.error('Error marking all notifications as read:', error);
+      console.error('Failed to mark all notifications as read:', error);
     }
   }, []);
 
   const removeNotification = useCallback(async (id: string) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+
     try {
-      const token = localStorage.getItem('access_token');
       const response = await fetch(`${API_BASE_URL}/notifications/${id}`, {
         method: 'DELETE',
         headers: {
@@ -379,26 +290,27 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
 
       if (response.ok) {
-        const deletedNotification = notifications.find(n => n.id === id);
         setNotifications(prev => prev.filter(n => n.id !== id));
         setToastNotifications(prev => prev.filter(n => n.id !== id));
-        
-        if (deletedNotification) {
-          setStats(prev => ({
+        setStats(prev => {
+          const notification = notifications.find(n => n.id === id);
+          return {
             ...prev,
-            total_count: prev.total_count - 1,
-            unread_count: !deletedNotification.read ? prev.unread_count - 1 : prev.unread_count
-          }));
-        }
+            total_count: Math.max(0, prev.total_count - 1),
+            unread_count: notification && !notification.read ? Math.max(0, prev.unread_count - 1) : prev.unread_count
+          };
+        });
       }
     } catch (error) {
-      console.error('Error deleting notification:', error);
+      console.error('Failed to remove notification:', error);
     }
   }, [notifications]);
 
   const clearAll = useCallback(async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+
     try {
-      const token = localStorage.getItem('access_token');
       const response = await fetch(`${API_BASE_URL}/notifications/clear-all`, {
         method: 'DELETE',
         headers: {
@@ -419,12 +331,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         });
       }
     } catch (error) {
-      console.error('Error clearing all notifications:', error);
+      console.error('Failed to clear all notifications:', error);
     }
   }, []);
 
   const updatePreferences = useCallback((newPreferences: Partial<NotificationPreferences>) => {
-    setPreferences(prev => ({ ...prev, ...newPreferences }));
+    setPreferences(prev => {
+      const updated = { ...prev, ...newPreferences };
+      localStorage.setItem('notification_preferences', JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
