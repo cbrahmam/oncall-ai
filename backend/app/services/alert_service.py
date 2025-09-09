@@ -30,7 +30,7 @@ class AlertService:
             "alert_id": alert_data.alert_id,
             "title": alert_data.title,
             "service": alert_data.service or "unknown",
-            "source": alert_data.source,
+            "source": alert_data.source.value if hasattr(alert_data.source, 'value') else str(alert_data.source),
             "environment": alert_data.environment or "unknown"
         }
         
@@ -176,6 +176,7 @@ class AlertService:
                 
         except Exception as e:
             logger.error(f"Error processing alert {alert_data.alert_id}: {e}")
+            await self.db.rollback()  # Add rollback on error
             return AlertProcessingResult(
                 success=False,
                 message=f"Error processing alert: {str(e)}",
@@ -189,7 +190,7 @@ class AlertService:
         fingerprint: str,
         organization_id: str
     ) -> AlertProcessingResult:
-        """Handle an active/triggered alert"""
+        """Handle an active/triggered alert - FIXED VERSION"""
         
         if existing_alert:
             # Update existing alert
@@ -249,31 +250,82 @@ class AlertService:
         
         if should_create_incident:
             try:
-                # Create incident directly without IncidentService
-                from app.models.incident import Incident
-                import uuid
+                # FIXED: Create incident directly without service conflicts
+                incident_id = str(uuid.uuid4())
+                
+                # Map alert severity to incident severity properly
+                severity_map = {
+                    AlertSeverity.INFO: "low",
+                    AlertSeverity.WARNING: "medium", 
+                    AlertSeverity.ERROR: "high",
+                    AlertSeverity.HIGH: "high",
+                    AlertSeverity.CRITICAL: "critical"
+                }
+                
+                # Get severity string value
+                alert_severity = alert_data.severity
+                if hasattr(alert_severity, 'value'):
+                    severity_key = alert_severity
+                else:
+                    # Handle string values
+                    severity_key = AlertSeverity[alert_severity.upper()] if isinstance(alert_severity, str) else alert_severity
+                
+                mapped_severity = severity_map.get(severity_key, "medium")
+                
+                # Build comprehensive description
+                description_parts = [alert_data.description or f"Alert from {alert_data.source}"]
+                
+                if alert_data.alert_url:
+                    description_parts.append(f"🔗 **Alert URL**: {alert_data.alert_url}")
+                if alert_data.dashboard_url:
+                    description_parts.append(f"📊 **Dashboard**: {alert_data.dashboard_url}")
+                if alert_data.runbook_url:
+                    description_parts.append(f"📚 **Runbook**: {alert_data.runbook_url}")
+                
+                # Add technical context
+                context_parts = []
+                if alert_data.service:
+                    context_parts.append(f"Service: {alert_data.service}")
+                if alert_data.environment:
+                    context_parts.append(f"Environment: {alert_data.environment}")
+                if alert_data.region:
+                    context_parts.append(f"Region: {alert_data.region}")
+                if alert_data.host:
+                    context_parts.append(f"Host: {alert_data.host}")
+                
+                if context_parts:
+                    description_parts.append(f"**Context**: {' | '.join(context_parts)}")
                 
                 incident = Incident(
-                    id=str(uuid.uuid4()),
+                    id=incident_id,
                     organization_id=organization_id,
-                    title=f"[{alert_data.service or 'Unknown'}] {alert_data.title}",
-                    description=alert_data.description or f"Alert from {alert_data.source}",
-                    severity=alert_data.severity.value if hasattr(alert_data.severity, 'value') else str(alert_data.severity),
-                    status="open",
+                    title=f"🚨 [{alert_data.service or 'Unknown'}] {alert_data.title}",
+                    description="\n\n".join(description_parts),
+                    severity=mapped_severity,  # Use string value
+                    status="open",  # Use string value
                     created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow()
+                    updated_at=datetime.utcnow(),
+                    tags=[
+                        f"source:{alert_data.source.value if hasattr(alert_data.source, 'value') else str(alert_data.source)}",
+                        f"alert_id:{alert_data.alert_id}",
+                        f"severity:{alert_data.severity.value if hasattr(alert_data.severity, 'value') else str(alert_data.severity)}",
+                        "auto-created"
+                    ] + (alert_data.tags or [])
                 )
                 
                 self.db.add(incident)
                 await self.db.flush()
                 
                 # Link alert to incident
-                new_alert.incident_id = incident.id
-                incident_id = str(incident.id)
+                new_alert.incident_id = incident_id
                 incident_created = True
+                
+                logger.info(f"Created incident {incident_id} from alert {new_alert.id}")
                 
             except Exception as e:
                 logger.error(f"Failed to create incident for alert {new_alert.id}: {e}")
+                # Don't fail the whole operation if incident creation fails
+                pass
         
         await self.db.commit()
         
@@ -323,7 +375,6 @@ class AlertService:
             if other_active_alerts == 0:
                 # Auto-resolve the incident
                 try:
-                    from app.models.incident import Incident
                     incident_result = await self.db.execute(
                         select(Incident).where(Incident.id == existing_alert.incident_id)
                     )
@@ -449,103 +500,6 @@ class AlertService:
         # This would check against a maintenance_windows table
         # For now, return False (no maintenance windows)
         return False
-
-    async def _alert_to_incident(
-        self, 
-        alert_data: GenericAlertPayload, 
-        alert_id: str
-    ) -> IncidentCreate:
-        """Convert alert data to incident creation request"""
-        
-        # Map alert severity to incident severity
-        severity_map = {
-            AlertSeverity.INFO: IncidentSeverity.LOW,
-            AlertSeverity.WARNING: IncidentSeverity.MEDIUM,
-            AlertSeverity.ERROR: IncidentSeverity.HIGH,
-            AlertSeverity.HIGH: IncidentSeverity.HIGH,  # For compatibility
-            AlertSeverity.CRITICAL: IncidentSeverity.CRITICAL
-        }
-        
-        # Create descriptive title
-        title = alert_data.title
-        if alert_data.service:
-            title = f"[{alert_data.service}] {title}"
-        if alert_data.environment:
-            title = f"{title} ({alert_data.environment})"
-        
-        # Build comprehensive description with context
-        description_parts = []
-        if alert_data.description:
-            description_parts.append(alert_data.description)
-        
-        # Add links and context
-        if alert_data.alert_url:
-            description_parts.append(f"🔗 **Alert URL**: {alert_data.alert_url}")
-        
-        if alert_data.dashboard_url:
-            description_parts.append(f"📊 **Dashboard**: {alert_data.dashboard_url}")
-        
-        if alert_data.runbook_url:
-            description_parts.append(f"📚 **Runbook**: {alert_data.runbook_url}")
-        
-        # Add technical context
-        context_parts = []
-        if alert_data.service:
-            context_parts.append(f"Service: {alert_data.service}")
-        if alert_data.environment:
-            context_parts.append(f"Environment: {alert_data.environment}")
-        if alert_data.region:
-            context_parts.append(f"Region: {alert_data.region}")
-        if alert_data.host:
-            context_parts.append(f"Host: {alert_data.host}")
-        
-        if context_parts:
-            description_parts.append(f"**Context**: {' | '.join(context_parts)}")
-        
-        # Add timing information
-        if alert_data.started_at:
-            description_parts.append(f"**Started**: {alert_data.started_at.isoformat()}")
-        
-        description = "\n\n".join(description_parts)
-        
-        # Build comprehensive tags
-        tags = alert_data.tags or []
-        tags.extend([
-            f"source:{alert_data.source}",
-            f"alert_id:{alert_id}",
-            f"severity:{alert_data.severity}",
-            "auto-created"
-        ])
-        
-        if alert_data.service:
-            tags.append(f"service:{alert_data.service}")
-        if alert_data.environment:
-            tags.append(f"env:{alert_data.environment}")
-        if alert_data.region:
-            tags.append(f"region:{alert_data.region}")
-        if alert_data.host:
-            tags.append(f"host:{alert_data.host}")
-        
-        return IncidentCreate(
-            title=title,
-            description=description,
-            severity=severity_map.get(alert_data.severity, IncidentSeverity.MEDIUM),
-            status=IncidentStatus.OPEN,
-            tags=tags,
-            metadata={
-                "alert_fingerprint": self.generate_alert_fingerprint(alert_data),
-                "alert_source": alert_data.source,
-                "auto_created": True,
-                "created_from_alert_id": alert_id,
-                "original_alert_data": {
-                    "service": alert_data.service,
-                    "environment": alert_data.environment,
-                    "region": alert_data.region,
-                    "severity": alert_data.severity,
-                    "started_at": alert_data.started_at.isoformat() if alert_data.started_at else None
-                }
-            }
-        )
 
     async def acknowledge_alert(
         self, 
