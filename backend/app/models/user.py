@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
+from pydantic import Field
 from app.database import Base
 from app.models.team import team_members
 
@@ -21,7 +22,7 @@ class User(Base):
     role = Column(String(50), default="engineer")  # admin, engineer, observer
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
-    
+    is_admin: bool = Field(default=False)
     # Contact info
     phone_number = Column(String(20))
     timezone = Column(String(50), default="UTC")

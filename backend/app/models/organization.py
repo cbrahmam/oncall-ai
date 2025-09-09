@@ -15,7 +15,7 @@ class Organization(Base):
     is_active = Column(Boolean, default=True)
     max_users = Column(Integer, default=5)
     max_incidents_per_month = Column(Integer, default=100)
-    
+    api_keys = relationship("APIKey", back_populates="organization")
     # Billing fields
     stripe_customer_id = Column(String(100), nullable=True)
     subscription_id = Column(String(100), nullable=True)

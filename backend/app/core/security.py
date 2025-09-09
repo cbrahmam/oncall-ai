@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.config import settings
 from app.database import get_async_session
+from app.models.user import User
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -104,6 +105,11 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+def require_admin(current_user: User = Depends(get_current_user)):
+    """Require admin privileges"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    return current_user
 
 # Optional: Get current user but don't fail if not authenticated
 async def get_current_user_optional(

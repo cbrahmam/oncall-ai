@@ -2,7 +2,7 @@
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-
+import uuid
 from app.models.incident import Incident
 
 class IncidentService:
@@ -39,7 +39,34 @@ class IncidentService:
         )
         
         return incident
-    
+    def create_incident(
+        self, 
+        incident_data, 
+        user_id: Optional[str], 
+        organization_id: str
+    ):
+        """Create a new incident - called by AlertService"""
+        
+        from app.models.incident import Incident
+        import uuid
+        
+        # Create the incident
+        incident = Incident(
+            id=str(uuid.uuid4()),
+            organization_id=organization_id,
+            title=incident_data.title,
+            description=incident_data.description,
+            severity=incident_data.severity,
+            status="open",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        
+        # Add to session but don't commit here - let AlertService handle it
+        self.db.add(incident)
+        
+        return incident
+
     async def find_similar_incidents(
         self, 
         incident: Incident, 

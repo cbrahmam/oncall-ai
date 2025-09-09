@@ -1,103 +1,208 @@
-import logging
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+# backend/app/services/organization_service.py
+
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
+from typing import Optional, Dict, Any
+from datetime import datetime, timedelta
 
-from app.database import get_async_session
+from app.models.organization import Organization
 from app.models.user import User
+from app.models.incident import Incident
+from app.models.alert import Alert
 from app.schemas.organization import (
-    OrganizationResponse, OrganizationUpdate, OrganizationStatsResponse
+    OrganizationCreate, OrganizationUpdate, OrganizationResponse, OrganizationStatsResponse
 )
-from app.core.auth import get_current_user, require_admin
-from app.services.organization_service import OrganizationService
+import logging
 
-router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.get("/me", response_model=OrganizationResponse)
-async def get_my_organization(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Get current user's organization details"""
-    
-    try:
-        service = OrganizationService(db)
-        
-        organization = await service.get_organization(str(current_user.organization_id))
-        
-        if not organization:
-            raise HTTPException(status_code=404, detail="Organization not found")
-        
-        return organization
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting organization: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get organization: {str(e)}")
+class OrganizationService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
 
-@router.patch("/me", response_model=OrganizationResponse)
-async def update_my_organization(
-    organization_update: OrganizationUpdate,
-    current_user: User = Depends(require_admin),  # Only admins can update org
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Update current user's organization"""
-    
-    try:
-        service = OrganizationService(db)
-        
-        organization = await service.update_organization(
-            organization_id=str(current_user.organization_id),
-            organization_update=organization_update
+    async def get_organization_by_id(self, organization_id: str) -> Optional[Organization]:
+        """Get organization by ID"""
+        result = await self.db.execute(
+            select(Organization).where(Organization.id == organization_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_organization_by_slug(self, slug: str) -> Optional[Organization]:
+        """Get organization by slug"""
+        result = await self.db.execute(
+            select(Organization).where(Organization.slug == slug)
+        )
+        return result.scalar_one_or_none()
+
+    async def create_organization(self, org_data: OrganizationCreate) -> Organization:
+        """Create a new organization"""
+        organization = Organization(
+            name=org_data.name,
+            slug=org_data.slug,
+            plan="free",
+            is_active=True,
+            max_users=5,  # Free plan default
+            max_incidents_per_month=100,  # Free plan default
+            created_at=datetime.utcnow()
         )
         
-        if not organization:
-            raise HTTPException(status_code=404, detail="Organization not found")
+        self.db.add(organization)
+        await self.db.commit()
+        await self.db.refresh(organization)
         
-        logger.info(f"Organization {organization.id} updated by {current_user.email}")
-        
+        logger.info(f"Created organization: {organization.name} ({organization.id})")
         return organization
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating organization: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update organization: {str(e)}")
 
-@router.get("/me/stats", response_model=OrganizationStatsResponse)
-async def get_organization_stats(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Get organization statistics"""
-    
-    try:
-        service = OrganizationService(db)
+    async def update_organization(
+        self, 
+        organization_id: str, 
+        update_data: OrganizationUpdate
+    ) -> Optional[Organization]:
+        """Update an organization"""
+        organization = await self.get_organization_by_id(organization_id)
+        if not organization:
+            return None
         
-        stats = await service.get_organization_stats(str(current_user.organization_id))
-        
-        return stats
-        
-    except Exception as e:
-        logger.error(f"Error getting organization stats: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get organization stats: {str(e)}")
+        if update_data.name is not None:
+            organization.name = update_data.name
+        if update_data.plan is not None:
+            organization.plan = update_data.plan
+            # Update limits based on plan
+            if update_data.plan == "pro":
+                organization.max_users = 25
+                organization.max_incidents_per_month = 1000
+            elif update_data.plan == "enterprise":
+                organization.max_users = 100
+                organization.max_incidents_per_month = -1  # Unlimited
+        if update_data.settings is not None:
+            organization.settings = update_data.settings
 
-@router.get("/me/members", response_model=List[dict])
-async def get_organization_members(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Get organization members"""
-    
-    try:
-        service = OrganizationService(db)
+        organization.updated_at = datetime.utcnow()
         
-        members = await service.get_organization_members(str(current_user.organization_id))
+        await self.db.commit()
+        await self.db.refresh(organization)
         
-        return members
+        logger.info(f"Updated organization: {organization.id}")
+        return organization
+
+    async def get_organization_stats(self, organization_id: str) -> OrganizationStatsResponse:
+        """Get comprehensive organization statistics"""
         
-    except Exception as e:
-        logger.error(f"Error getting organization members: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get organization members: {str(e)}")
+        # Get total users
+        users_result = await self.db.execute(
+            select(func.count(User.id)).where(User.organization_id == organization_id)
+        )
+        total_users = users_result.scalar() or 0
+        
+        # Get total incidents
+        incidents_result = await self.db.execute(
+            select(func.count(Incident.id)).where(Incident.organization_id == organization_id)
+        )
+        total_incidents = incidents_result.scalar() or 0
+        
+        # Get active incidents
+        active_incidents_result = await self.db.execute(
+            select(func.count(Incident.id)).where(
+                Incident.organization_id == organization_id,
+                Incident.status.in_(["open", "investigating", "identified"])
+            )
+        )
+        active_incidents = active_incidents_result.scalar() or 0
+        
+        # Get resolved incidents
+        resolved_incidents = total_incidents - active_incidents
+        
+        # Get total alerts
+        alerts_result = await self.db.execute(
+            select(func.count(Alert.id)).where(Alert.organization_id == organization_id)
+        )
+        total_alerts = alerts_result.scalar() or 0
+        
+        # Get 24h alert volume
+        yesterday = datetime.utcnow() - timedelta(days=1)
+        alert_24h_result = await self.db.execute(
+            select(func.count(Alert.id)).where(
+                Alert.organization_id == organization_id,
+                Alert.created_at >= yesterday
+            )
+        )
+        alert_volume_24h = alert_24h_result.scalar() or 0
+        
+        # Calculate MTTR (Mean Time To Resolution)
+        mttr_hours = None
+        try:
+            # Get resolved incidents with resolution time
+            resolved_incidents_query = await self.db.execute(
+                select(Incident.created_at, Incident.resolved_at).where(
+                    Incident.organization_id == organization_id,
+                    Incident.status == "resolved",
+                    Incident.resolved_at.isnot(None)
+                ).limit(100)  # Last 100 resolved incidents
+            )
+            
+            resolved_incidents_data = resolved_incidents_query.all()
+            
+            if resolved_incidents_data:
+                total_resolution_time = sum(
+                    (resolved_at - created_at).total_seconds() / 3600
+                    for created_at, resolved_at in resolved_incidents_data
+                )
+                mttr_hours = total_resolution_time / len(resolved_incidents_data)
+        except Exception as e:
+            logger.error(f"Error calculating MTTR: {e}")
+        
+        # Get top services by incident count
+        top_services = []
+        try:
+            top_services_result = await self.db.execute(
+                select(Alert.service_name, func.count(Alert.id)).where(
+                    Alert.organization_id == organization_id,
+                    Alert.service_name.isnot(None)
+                ).group_by(Alert.service_name).order_by(
+                    func.count(Alert.id).desc()
+                ).limit(5)
+            )
+            top_services = [service for service, count in top_services_result.all()]
+        except Exception as e:
+            logger.error(f"Error getting top services: {e}")
+        
+        return OrganizationStatsResponse(
+            total_users=total_users,
+            total_incidents=total_incidents,
+            total_alerts=total_alerts,
+            active_incidents=active_incidents,
+            resolved_incidents=resolved_incidents,
+            mttr_hours=round(mttr_hours, 2) if mttr_hours else None,
+            alert_volume_24h=alert_volume_24h,
+            top_services=top_services
+        )
+
+    async def delete_organization(self, organization_id: str) -> bool:
+        """Delete an organization (soft delete by deactivating)"""
+        organization = await self.get_organization_by_id(organization_id)
+        if not organization:
+            return False
+        
+        organization.is_active = False
+        organization.updated_at = datetime.utcnow()
+        
+        await self.db.commit()
+        
+        logger.info(f"Deactivated organization: {organization.id}")
+        return True
+
+    async def list_organizations(
+        self, 
+        skip: int = 0, 
+        limit: int = 100
+    ) -> list[Organization]:
+        """List all organizations (admin only)"""
+        result = await self.db.execute(
+            select(Organization)
+            .where(Organization.is_active == True)
+            .offset(skip)
+            .limit(limit)
+            .order_by(Organization.created_at.desc())
+        )
+        return result.scalars().all()

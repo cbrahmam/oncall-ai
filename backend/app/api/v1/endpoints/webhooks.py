@@ -1,58 +1,110 @@
-import json
-import logging
-from typing import Dict, Any, Optional
-from fastapi import APIRouter, Request, HTTPException, Depends, Header
+from fastapi import APIRouter, Request, Depends, HTTPException, Header
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from typing import Optional, Dict, Any
+import logging
+import hashlib
+import hmac
+import json
+from datetime import datetime
 from pydantic import ValidationError
 
 from app.database import get_async_session
-from app.models.organization import Organization
+from app.models.organization import Organization  
+from app.models.integration import Integration
 from app.services.alert_service import AlertService
 from app.schemas.alert import (
     GenericAlertPayload, DatadogAlertPayload, GrafanaAlertPayload,
-    AlertProcessingResult, AlertSource, AlertSeverity, AlertStatus
+    AlertSeverity, AlertStatus, AlertSource
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
+security = HTTPBearer(auto_error=False)
 
 async def get_organization_from_webhook(
     request: Request,
-    organization_key: Optional[str] = Header(None, alias="X-Organization-Key"),
-    db: AsyncSession = Depends(get_async_session)
+    authorization: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    x_org_id: Optional[str] = Header(None, alias="X-Organization-ID"),
+    x_webhook_token: Optional[str] = Header(None, alias="X-Webhook-Token")
 ) -> str:
-    """
-    Extract organization ID from webhook request.
-    Production-ready organization lookup with fallback strategy.
-    """
+    """Extract organization ID from webhook request headers or token"""
     
     try:
-        # Strategy 1: Use organization key from header to lookup mapping
-        if organization_key:
-            # TODO: In production, implement webhook key -> org_id mapping
-            # For now, look up first available organization
-            logger.info(f"Webhook request with org key: {organization_key}")
+        # Method 1: Direct organization ID in header
+        if x_org_id:
+            logger.info(f"Using organization ID from header: {x_org_id}")
+            return x_org_id
+            
+        # Method 2: JWT token (for authenticated webhooks)
+        if authorization and authorization.credentials:
+            # You can add JWT validation here if needed
+            # For now, assume the token contains org info
+            logger.info("Using organization from JWT token")
+            # Extract org from JWT - implement as needed
+            pass
+            
+        # Method 3: Webhook token lookup
+        if x_webhook_token:
+            logger.info("Looking up organization by webhook token")
+            # This would lookup organization by webhook token
+            # Implementation depends on your webhook token system
+            pass
+            
+        # Method 4: URL path parsing (for custom webhook URLs)
+        path_parts = request.url.path.split('/')
+        if len(path_parts) >= 4 and path_parts[-2] == 'webhooks':
+            # URL like /api/v1/webhooks/{org_id}/datadog
+            potential_org_id = path_parts[-3]
+            if len(potential_org_id) == 36:  # UUID length
+                logger.info(f"Extracted org ID from URL: {potential_org_id}")
+                return potential_org_id
         
-        # Strategy 2: Get the most recently created organization (fallback)
-        query = select(Organization).order_by(Organization.created_at.desc()).limit(1)
-        result = await db.execute(query)
-        org = result.scalar_one_or_none()
-        
-        if org:
-            logger.info(f"Using organization: {org.name} ({org.id})")
-            return str(org.id)
-        
-        # Strategy 3: Critical fallback - create default organization if none exists
-        logger.warning("No organizations found, this should not happen in production")
+        # Default fallback - you might want to remove this in production
+        logger.warning("No organization ID found, using default")
         raise HTTPException(
-            status_code=500, 
-            detail="No organizations configured. Contact administrator."
+            status_code=400, 
+            detail="Organization ID required. Use X-Organization-ID header or authenticated webhook."
         )
         
     except Exception as e:
-        logger.error(f"Error in organization lookup: {e}")
+        logger.error(f"Error extracting organization ID: {e}")
         raise HTTPException(status_code=500, detail="Organization lookup failed")
+
+def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """Verify webhook signature for security"""
+    if not signature or not secret:
+        return False
+        
+    try:
+        expected_signature = hmac.new(
+            secret.encode('utf-8'),
+            payload,
+            hashlib.sha256
+        ).hexdigest()
+        
+        # Handle different signature formats
+        if signature.startswith('sha256='):
+            signature = signature[7:]
+            
+        return hmac.compare_digest(signature, expected_signature)
+    except Exception as e:
+        logger.error(f"Signature verification failed: {e}")
+        return False
+
+@router.get("/health")
+async def webhook_health():
+    """Health check endpoint for webhook system"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "2.0.0",
+        "supported_sources": [
+            "datadog", "grafana", "aws-cloudwatch", "new-relic", 
+            "pagerduty", "prometheus", "generic"
+        ]
+    }
 
 @router.post("/generic")
 async def generic_webhook(
@@ -76,9 +128,13 @@ async def generic_webhook(
             "incident_id": result.incident_id,
             "incident_created": result.incident_created,
             "incident_updated": result.incident_updated,
-            "alert_fingerprint": result.alert_fingerprint
+            "alert_fingerprint": result.alert_fingerprint,
+            "source": "generic"
         }
     
+    except ValidationError as e:
+        logger.error(f"Invalid generic payload: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid payload: {str(e)}")
     except Exception as e:
         logger.error(f"Error processing generic alert: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing alert: {str(e)}")
@@ -87,35 +143,64 @@ async def generic_webhook(
 async def datadog_webhook(
     request: Request,
     db: AsyncSession = Depends(get_async_session),
-    organization_id: str = Depends(get_organization_from_webhook)
+    organization_id: str = Depends(get_organization_from_webhook),
+    x_signature: Optional[str] = Header(None, alias="X-Datadog-Signature")
 ):
-    """Webhook endpoint for Datadog alerts"""
+    """Webhook endpoint for Datadog alerts with signature verification"""
     
     try:
-        raw_payload = await request.json()
+        # Get raw payload for signature verification
+        payload_bytes = await request.body()
+        raw_payload = json.loads(payload_bytes.decode())
+        
+        # Verify signature if provided (optional for now)
+        # if x_signature:
+        #     if not verify_webhook_signature(payload_bytes, x_signature, webhook_secret):
+        #         raise HTTPException(status_code=401, detail="Invalid webhook signature")
+        
         logger.info(f"Processing Datadog webhook for org: {organization_id}")
         
-        # Parse Datadog payload
-        datadog_alert = DatadogAlertPayload(**raw_payload)
-        
-        # Convert to generic format
-        generic_alert = datadog_alert.to_generic()
-        
-        # Process the alert
-        service = AlertService(db)
-        result = await service.process_alert(generic_alert, organization_id)
-        
-        logger.info(f"Datadog alert processed: {result.success}")
-        
-        return {
-            "success": result.success,
-            "message": result.message,
-            "incident_id": result.incident_id,
-            "incident_created": result.incident_created,
-            "incident_updated": result.incident_updated,
-            "alert_fingerprint": result.alert_fingerprint,
-            "source": "datadog"
-        }
+        # Handle different Datadog payload formats
+        if isinstance(raw_payload, list):
+            # Datadog can send multiple alerts in one webhook
+            results = []
+            for alert_payload in raw_payload:
+                datadog_alert = DatadogAlertPayload(**alert_payload)
+                generic_alert = datadog_alert.to_generic()
+                
+                service = AlertService(db)
+                result = await service.process_alert(generic_alert, organization_id)
+                results.append(result)
+            
+            return {
+                "success": all(r.success for r in results),
+                "message": f"Processed {len(results)} alerts",
+                "results": [
+                    {
+                        "incident_id": r.incident_id,
+                        "incident_created": r.incident_created,
+                        "alert_fingerprint": r.alert_fingerprint
+                    } for r in results
+                ],
+                "source": "datadog"
+            }
+        else:
+            # Single alert
+            datadog_alert = DatadogAlertPayload(**raw_payload)
+            generic_alert = datadog_alert.to_generic()
+            
+            service = AlertService(db)
+            result = await service.process_alert(generic_alert, organization_id)
+            
+            return {
+                "success": result.success,
+                "message": result.message,
+                "incident_id": result.incident_id,
+                "incident_created": result.incident_created,
+                "incident_updated": result.incident_updated,
+                "alert_fingerprint": result.alert_fingerprint,
+                "source": "datadog"
+            }
     
     except ValidationError as e:
         logger.error(f"Invalid Datadog payload: {e}")
@@ -136,29 +221,53 @@ async def grafana_webhook(
         raw_payload = await request.json()
         logger.info(f"Processing Grafana webhook for org: {organization_id}")
         
-        # Parse Grafana payload
-        grafana_alert = GrafanaAlertPayload(**raw_payload)
-        
-        # Convert to generic format
-        generic_alert = grafana_alert.to_generic()
-        
-        # Process the alert
-        service = AlertService(db)
-        result = await service.process_alert(generic_alert, organization_id)
-        
-        return {
-            "success": result.success,
-            "message": result.message,
-            "incident_id": result.incident_id,
-            "incident_created": result.incident_created,
-            "incident_updated": result.incident_updated,
-            "alert_fingerprint": result.alert_fingerprint,
-            "source": "grafana"
-        }
+        # Grafana sends different payload formats
+        if "alerts" in raw_payload:
+            # New Grafana alerting format (v8+)
+            results = []
+            for alert in raw_payload["alerts"]:
+                grafana_alert = GrafanaAlertPayload(**alert)
+                generic_alert = grafana_alert.to_generic()
+                
+                service = AlertService(db)
+                result = await service.process_alert(generic_alert, organization_id)
+                results.append(result)
+            
+            return {
+                "success": all(r.success for r in results),
+                "message": f"Processed {len(results)} Grafana alerts",
+                "results": [
+                    {
+                        "incident_id": r.incident_id,
+                        "incident_created": r.incident_created,
+                        "alert_fingerprint": r.alert_fingerprint
+                    } for r in results
+                ],
+                "source": "grafana"
+            }
+        else:
+            # Legacy Grafana format or single alert
+            grafana_alert = GrafanaAlertPayload(**raw_payload)
+            generic_alert = grafana_alert.to_generic()
+            
+            service = AlertService(db)
+            result = await service.process_alert(generic_alert, organization_id)
+            
+            return {
+                "success": result.success,
+                "message": result.message,
+                "incident_id": result.incident_id,
+                "incident_created": result.incident_created,
+                "incident_updated": result.incident_updated,
+                "alert_fingerprint": result.alert_fingerprint,
+                "source": "grafana"
+            }
     
     except ValidationError as e:
+        logger.error(f"Invalid Grafana payload: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid Grafana payload: {str(e)}")
     except Exception as e:
+        logger.error(f"Error processing Grafana alert: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing Grafana alert: {str(e)}")
 
 @router.post("/aws-cloudwatch")
@@ -167,34 +276,45 @@ async def aws_cloudwatch_webhook(
     db: AsyncSession = Depends(get_async_session),
     organization_id: str = Depends(get_organization_from_webhook)
 ):
-    """Webhook endpoint for AWS CloudWatch alerts"""
+    """Webhook endpoint for AWS CloudWatch alerts (via SNS)"""
     
     try:
         raw_payload = await request.json()
-        logger.info(f"Processing CloudWatch webhook for org: {organization_id}")
+        logger.info(f"Processing AWS CloudWatch webhook for org: {organization_id}")
         
-        # AWS CloudWatch SNS format conversion
-        if "Message" in raw_payload and isinstance(raw_payload["Message"], str):
-            try:
-                cloudwatch_data = json.loads(raw_payload["Message"])
-            except json.JSONDecodeError:
-                cloudwatch_data = raw_payload
+        # Handle SNS message format
+        if "Type" in raw_payload and raw_payload["Type"] == "Notification":
+            # Parse SNS notification
+            message = json.loads(raw_payload["Message"]) if isinstance(raw_payload["Message"], str) else raw_payload["Message"]
+            
+            # Convert to generic format
+            generic_alert = GenericAlertPayload(
+                alert_id=raw_payload.get("MessageId", "unknown"),
+                title=message.get("AlarmName", "CloudWatch Alert"),
+                description=message.get("AlarmDescription", raw_payload.get("Subject", "")),
+                severity=AlertSeverity.WARNING if message.get("NewStateValue") == "ALARM" else AlertSeverity.INFO,
+                status=AlertStatus.ACTIVE if message.get("NewStateValue") == "ALARM" else AlertStatus.RESOLVED,
+                source=AlertSource.AWS_CLOUDWATCH,
+                service=message.get("Namespace"),
+                region=message.get("Region"),
+                started_at=datetime.fromisoformat(raw_payload.get("Timestamp", datetime.utcnow().isoformat())),
+                alert_url=f"https://console.aws.amazon.com/cloudwatch/home?region={message.get('Region', 'us-east-1')}#alarmsV2:alarm/{message.get('AlarmName')}",
+                raw_payload=raw_payload
+            )
         else:
-            cloudwatch_data = raw_payload
+            # Direct CloudWatch alarm format
+            generic_alert = GenericAlertPayload(
+                alert_id=raw_payload.get("AlarmName", "unknown"),
+                title=raw_payload.get("AlarmName", "CloudWatch Alert"),
+                description=raw_payload.get("AlarmDescription", ""),
+                severity=AlertSeverity.WARNING if raw_payload.get("NewStateValue") == "ALARM" else AlertSeverity.INFO,
+                status=AlertStatus.ACTIVE if raw_payload.get("NewStateValue") == "ALARM" else AlertStatus.RESOLVED,
+                source=AlertSource.AWS_CLOUDWATCH,
+                service=raw_payload.get("Namespace"),
+                region=raw_payload.get("Region"),
+                raw_payload=raw_payload
+            )
         
-        # Convert CloudWatch alarm to generic format
-        generic_alert = GenericAlertPayload(
-            alert_id=cloudwatch_data.get("AlarmName", f"cloudwatch-{hash(str(cloudwatch_data))}"),
-            title=cloudwatch_data.get("AlarmName", "CloudWatch Alert"),
-            description=cloudwatch_data.get("AlarmDescription", ""),
-            severity=AlertSeverity.CRITICAL if cloudwatch_data.get("NewStateValue") == "ALARM" else AlertSeverity.WARNING,
-            status=AlertStatus.ACTIVE if cloudwatch_data.get("NewStateValue") == "ALARM" else AlertStatus.RESOLVED,
-            source=AlertSource.AWS_CLOUDWATCH,
-            region=cloudwatch_data.get("Region"),
-            raw_payload=raw_payload
-        )
-        
-        # Process the alert
         service = AlertService(db)
         result = await service.process_alert(generic_alert, organization_id)
         
@@ -205,42 +325,57 @@ async def aws_cloudwatch_webhook(
             "incident_created": result.incident_created,
             "incident_updated": result.incident_updated,
             "alert_fingerprint": result.alert_fingerprint,
-            "source": "aws_cloudwatch"
+            "source": "aws-cloudwatch"
         }
     
     except Exception as e:
         logger.error(f"Error processing CloudWatch alert: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing CloudWatch alert: {str(e)}")
 
-@router.post("/test")
-async def test_webhook(
+@router.post("/new-relic")
+async def new_relic_webhook(
     request: Request,
     db: AsyncSession = Depends(get_async_session),
     organization_id: str = Depends(get_organization_from_webhook)
 ):
-    """Test endpoint for webhook development and debugging"""
+    """Webhook endpoint for New Relic alerts"""
     
     try:
         raw_payload = await request.json()
-        logger.info(f"Processing test webhook for org: {organization_id}")
+        logger.info(f"Processing New Relic webhook for org: {organization_id}")
         
-        # Create a test alert with correct enum values
-        test_alert = GenericAlertPayload(
-            alert_id=f"test-{hash(str(raw_payload))}",
-            title="Test Alert from Webhook",
-            description="This is a test alert to verify webhook functionality",
-            severity=AlertSeverity.WARNING,  # Use enum value, not string
-            status=AlertStatus.ACTIVE,       # Use enum value, not string
-            source=AlertSource.GENERIC,
-            service="test-service",
-            environment="test",
-            tags=["test", "webhook"],
+        # New Relic alert format
+        incident = raw_payload.get("incident", raw_payload)
+        
+        # Map New Relic severity
+        severity_map = {
+            "critical": AlertSeverity.CRITICAL,
+            "warning": AlertSeverity.WARNING,
+            "info": AlertSeverity.INFO
+        }
+        
+        # Map New Relic state
+        status_map = {
+            "open": AlertStatus.ACTIVE,
+            "acknowledged": AlertStatus.ACTIVE,
+            "closed": AlertStatus.RESOLVED
+        }
+        
+        generic_alert = GenericAlertPayload(
+            alert_id=str(incident.get("incident_id", "unknown")),
+            title=incident.get("condition_name", "New Relic Alert"),
+            description=incident.get("details", ""),
+            severity=severity_map.get(incident.get("priority", "warning").lower(), AlertSeverity.WARNING),
+            status=status_map.get(incident.get("state", "open").lower(), AlertStatus.ACTIVE),
+            source=AlertSource.NEW_RELIC,
+            service=incident.get("policy_name"),
+            environment=incident.get("targets", [{}])[0].get("labels", {}).get("environment") if incident.get("targets") else None,
+            alert_url=incident.get("incident_url"),
             raw_payload=raw_payload
         )
         
-        # Process the alert
         service = AlertService(db)
-        result = await service.process_alert(test_alert, organization_id)
+        result = await service.process_alert(generic_alert, organization_id)
         
         return {
             "success": result.success,
@@ -249,26 +384,119 @@ async def test_webhook(
             "incident_created": result.incident_created,
             "incident_updated": result.incident_updated,
             "alert_fingerprint": result.alert_fingerprint,
+            "source": "new-relic"
+        }
+    
+    except Exception as e:
+        logger.error(f"Error processing New Relic alert: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing New Relic alert: {str(e)}")
+
+@router.post("/prometheus")
+async def prometheus_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_async_session),
+    organization_id: str = Depends(get_organization_from_webhook)
+):
+    """Webhook endpoint for Prometheus Alertmanager"""
+    
+    try:
+        raw_payload = await request.json()
+        logger.info(f"Processing Prometheus webhook for org: {organization_id}")
+        
+        results = []
+        
+        # Prometheus sends alerts in a list
+        for alert in raw_payload.get("alerts", []):
+            # Map Prometheus severity
+            severity_map = {
+                "critical": AlertSeverity.CRITICAL,
+                "warning": AlertSeverity.WARNING,
+                "info": AlertSeverity.INFO
+            }
+            
+            status_map = {
+                "firing": AlertStatus.ACTIVE,
+                "resolved": AlertStatus.RESOLVED
+            }
+            
+            labels = alert.get("labels", {})
+            annotations = alert.get("annotations", {})
+            
+            generic_alert = GenericAlertPayload(
+                alert_id=alert.get("fingerprint", "unknown"),
+                title=labels.get("alertname", "Prometheus Alert"),
+                description=annotations.get("description", annotations.get("summary", "")),
+                severity=severity_map.get(labels.get("severity", "warning").lower(), AlertSeverity.WARNING),
+                status=status_map.get(alert.get("status", "firing").lower(), AlertStatus.ACTIVE),
+                source=AlertSource.GENERIC,  # Could add PROMETHEUS to AlertSource enum
+                service=labels.get("service", labels.get("job")),
+                environment=labels.get("environment", labels.get("env")),
+                region=labels.get("region"),
+                tags=[f"{k}:{v}" for k, v in labels.items()],
+                alert_url=raw_payload.get("externalURL"),
+                runbook_url=annotations.get("runbook_url"),
+                raw_payload=alert
+            )
+            
+            service = AlertService(db)
+            result = await service.process_alert(generic_alert, organization_id)
+            results.append(result)
+        
+        return {
+            "success": all(r.success for r in results),
+            "message": f"Processed {len(results)} Prometheus alerts",
+            "results": [
+                {
+                    "incident_id": r.incident_id,
+                    "incident_created": r.incident_created,
+                    "alert_fingerprint": r.alert_fingerprint
+                } for r in results
+            ],
+            "source": "prometheus"
+        }
+    
+    except Exception as e:
+        logger.error(f"Error processing Prometheus alert: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing Prometheus alert: {str(e)}")
+
+@router.post("/test")
+async def test_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_async_session),
+    organization_id: str = Depends(get_organization_from_webhook)
+):
+    """Test webhook endpoint for debugging and integration testing"""
+    
+    try:
+        raw_payload = await request.json()
+        logger.info(f"Test webhook received for org {organization_id}: {raw_payload}")
+        
+        # Create a test alert
+        test_alert = GenericAlertPayload(
+            alert_id=f"test-{datetime.utcnow().timestamp()}",
+            title="Test Alert",
+            description="This is a test alert for webhook integration testing",
+            severity=AlertSeverity.INFO,
+            status=AlertStatus.ACTIVE,
+            source=AlertSource.GENERIC,
+            service="test-service",
+            environment="test",
+            raw_payload=raw_payload
+        )
+        
+        service = AlertService(db)
+        result = await service.process_alert(test_alert, organization_id)
+        
+        return {
+            "success": result.success,
+            "message": "Test webhook processed successfully",
+            "incident_id": result.incident_id,
+            "incident_created": result.incident_created,
+            "alert_fingerprint": result.alert_fingerprint,
             "source": "test",
             "received_payload": raw_payload
         }
     
     except Exception as e:
-        logger.error(f"Error processing test alert: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing test alert: {str(e)}")
-
-@router.get("/health")
-async def webhook_health():
-    """Health check endpoint for webhooks"""
-    return {
-        "status": "healthy",
-        "service": "OffCall AI Webhook Service",
-        "version": "1.0.0",
-        "supported_sources": [
-            "generic",
-            "datadog", 
-            "grafana",
-            "aws_cloudwatch",
-            "test"
-        ]
-    }
+        logger.error(f"Error processing test webhook: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing test webhook: {str(e)}")

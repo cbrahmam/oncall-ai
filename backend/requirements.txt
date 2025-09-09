@@ -61,3 +61,4 @@ pydantic[email]>=2.5.0           # Enhanced validation
 typing-extensions>=4.8.0         # Type hints support
 
 stripe>=7.0.0
+cachetools>=5.3.0
