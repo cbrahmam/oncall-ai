@@ -12,9 +12,10 @@ from app.models.incident import Incident
 from app.models.audit_log import AuditLog
 from app.core.security import get_current_user
 from app.schemas.incident import IncidentResponse, IncidentUpdate
-from app.services.ai_service import AIService
+from app.services.ai_service import EnhancedAIService as AIService
 
 # Add these new endpoints to your existing router
+router = APIRouter()
 
 @router.get("/{incident_id}/timeline")
 async def get_incident_timeline(
