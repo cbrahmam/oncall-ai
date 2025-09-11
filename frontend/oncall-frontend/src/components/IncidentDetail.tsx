@@ -18,6 +18,7 @@ import {
 import { useNotifications } from '../contexts/NotificationContext';
 import IncidentTimeline from './IncidentTimeline';
 import IncidentComments from './IncidentComments';
+import IncidentResolutionWorkflow from './IncidentResolutionWorkflow';
 import IncidentActions from './IncidentActions';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';

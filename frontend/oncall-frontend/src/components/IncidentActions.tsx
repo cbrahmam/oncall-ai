@@ -38,6 +38,7 @@ interface IncidentActionsProps {
   onUpdate: (updatedIncident: IncidentData) => void;
 }
 
+
 const IncidentActions: React.FC<IncidentActionsProps> = ({ incident, onUpdate }) => {
   const { showToast } = useNotifications();
   const [isUpdating, setIsUpdating] = useState(false);

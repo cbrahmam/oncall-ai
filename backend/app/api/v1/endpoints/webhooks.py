@@ -19,7 +19,7 @@ from app.schemas.alert import (
     AlertSeverity, AlertStatus, AlertSource
 )
 
-router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+router = APIRouter(tags=["webhooks"])  
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 

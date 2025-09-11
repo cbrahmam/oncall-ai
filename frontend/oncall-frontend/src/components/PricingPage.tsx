@@ -1,11 +1,17 @@
-// frontend/src/components/PricingPage.tsx
 import React, { useState } from 'react';
-import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { 
+  CheckIcon,
+  StarIcon,
+  BoltIcon,
+  ShieldCheckIcon,
+  CpuChipIcon,
+  UsersIcon
+} from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
 
 interface PricingPageProps {
-  onPlanSelected?: () => void;
+  onPlanSelected?: (planId: string) => void;
   currentPlan?: string;
   showBackButton?: boolean;
   onBack?: () => void;
@@ -23,39 +29,24 @@ const PricingPage: React.FC<PricingPageProps> = ({
 
   const plans = [
     {
-      id: 'free',
-      name: 'Free',
-      price: '$0',
-      period: '/forever',
-      description: 'Perfect for getting started',
-      popular: false,
-      features: [
-        'Up to 3 team members',
-        'Basic incident management',
-        'Email notifications',
-        'Community support',
-        '5 integrations'
-      ],
-      buttonText: 'Get Started',
-      buttonStyle: 'bg-gray-700 hover:bg-gray-600 text-white'
-    },
-    {
       id: 'pro',
       name: 'Pro',
       price: '$29',
       period: '/user/month',
-      description: 'For growing teams',
+      description: 'Perfect for growing teams',
       popular: true,
+      trial: '14-day free trial',
       features: [
         'Up to 25 team members',
         'AI-powered incident analysis',
-        'Advanced notifications (Slack, SMS)',
-        'Priority support',
-        'Unlimited integrations',
-        'Custom escalation policies',
-        'Basic analytics'
+        'Unlimited monitoring integrations',
+        'Slack, SMS & email notifications',
+        'Basic escalation policies',
+        'Community support',
+        'Mobile app access',
+        'Basic analytics dashboard'
       ],
-      buttonText: 'Get Started',
+      buttonText: 'Start 14-Day Free Trial',
       buttonStyle: 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white'
     },
     {
@@ -65,17 +56,19 @@ const PricingPage: React.FC<PricingPageProps> = ({
       period: '/user/month',
       description: 'For scaling organizations',
       popular: false,
+      trial: '14-day free trial',
       features: [
+        'Everything in Pro',
         'Unlimited team members',
-        'Advanced AI features',
-        'Multi-channel notifications',
-        '24/7 dedicated support',
-        'Enterprise integrations',
+        'Advanced AI features (Claude + Gemini)',
+        'Custom escalation policies',
         'Advanced analytics & reporting',
+        'Priority support (4-hour response)',
+        'API access & webhooks',
         'Custom SLA management',
-        'API access'
+        'Advanced security controls'
       ],
-      buttonText: 'Get Started',
+      buttonText: 'Start 14-Day Free Trial',
       buttonStyle: 'bg-gray-700 hover:bg-gray-600 text-white border border-gray-600'
     },
     {
@@ -85,15 +78,17 @@ const PricingPage: React.FC<PricingPageProps> = ({
       period: '',
       description: 'For large organizations',
       popular: false,
+      trial: 'Custom trial period',
       features: [
         'Everything in Plus',
         'Dedicated success manager',
         'Custom deployment options',
-        'Advanced security controls',
-        'Custom integrations',
+        'Advanced security & compliance',
+        'Custom integrations development',
         'Training & onboarding',
-        'SLA guarantees',
-        'White-label options'
+        'SLA guarantees (99.9% uptime)',
+        'White-label options',
+        '24/7 phone support'
       ],
       buttonText: 'Contact Sales',
       buttonStyle: 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white'
@@ -101,11 +96,11 @@ const PricingPage: React.FC<PricingPageProps> = ({
   ];
 
   const handlePlanSelection = async (planId: string) => {
-    if (!isAuthenticated && planId !== 'free') {
+    if (!isAuthenticated) {
       showToast({
         type: 'warning',
         title: 'Authentication Required',
-        message: 'Please sign up or log in to select a paid plan.',
+        message: 'Please sign up or log in to start your free trial.',
         autoClose: true,
       });
       return;
@@ -114,31 +109,15 @@ const PricingPage: React.FC<PricingPageProps> = ({
     setLoading(planId);
 
     try {
-      if (planId === 'free') {
-        // For free plan, just mark as selected
-        if (onPlanSelected) onPlanSelected();
-        showToast({
-          type: 'success',
-          title: 'Plan Selected',
-          message: 'Welcome to OffCall AI! You can upgrade anytime from settings.',
-          autoClose: true,
-        });
-        return;
-      }
+      const token = localStorage.getItem('access_token');
 
       if (planId === 'enterprise') {
-        // For enterprise, redirect to contact form or show contact info
-        showToast({
-          type: 'info',
-          title: 'Enterprise Plan',
-          message: 'Our sales team will contact you within 24 hours to discuss your requirements.',
-          autoClose: true,
-        });
+        // Redirect to sales contact
+        window.location.href = 'mailto:sales@offcallai.com?subject=Enterprise Plan Inquiry&body=Hi, I\'m interested in the Enterprise plan for my organization.';
         return;
       }
 
-      // For paid plans, create Stripe checkout session
-      const token = localStorage.getItem('access_token');
+      // For Pro and Plus plans, redirect to Stripe checkout
       const response = await fetch('/api/v1/billing/create-checkout-session', {
         method: 'POST',
         headers: {
@@ -147,21 +126,23 @@ const PricingPage: React.FC<PricingPageProps> = ({
         },
         body: JSON.stringify({ 
           plan_type: planId,
-          success_url: `${window.location.origin}/dashboard?payment=success`,
-          cancel_url: `${window.location.origin}/pricing?payment=cancelled`
+          trial_days: 14 // 14-day free trial
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        // Redirect to Stripe Checkout
+        showToast({
+          type: 'success',
+          title: 'Redirecting to Checkout',
+          message: 'Starting your 14-day free trial...',
+          autoClose: true,
+        });
         window.location.href = data.checkout_url;
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to create checkout session');
+        throw new Error('Failed to create checkout session');
       }
     } catch (error) {
-      console.error('Plan selection error:', error);
       showToast({
         type: 'error',
         title: 'Error',
@@ -192,17 +173,33 @@ const PricingPage: React.FC<PricingPageProps> = ({
           
           <h1 className="text-5xl md:text-6xl font-bold mb-6">
             <span className="bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-              Simple, Transparent
+              Start Your Free Trial
             </span>
             <br />
             <span className="bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-              Pricing
+              No Credit Card Required
             </span>
           </h1>
           
-          <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-            Start free, scale as you grow. No hidden fees, no vendor lock-in.
+          <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-8">
+            Try OffCall AI risk-free for 14 days. Cancel anytime, no questions asked.
           </p>
+
+          {/* Trust Badges */}
+          <div className="flex justify-center gap-8 text-gray-400 text-sm">
+            <div className="flex items-center gap-2">
+              <ShieldCheckIcon className="w-5 h-5" />
+              <span>SOC 2 Compliant</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <BoltIcon className="w-5 h-5" />
+              <span>99.9% Uptime</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <UsersIcon className="w-5 h-5" />
+              <span>500+ Teams</span>
+            </div>
+          </div>
 
           {currentPlan && (
             <div className="mt-6">
@@ -214,50 +211,49 @@ const PricingPage: React.FC<PricingPageProps> = ({
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
+        <div className="grid md:grid-cols-3 gap-8 mb-16 max-w-6xl mx-auto">
           {plans.map((plan) => (
             <div
               key={plan.id}
-              className={`relative rounded-2xl p-8 ${
+              className={`relative rounded-2xl p-8 transition-all duration-200 ${
                 plan.popular
-                  ? 'bg-gradient-to-b from-blue-500/10 to-purple-600/10 border-2 border-blue-500/30'
-                  : 'bg-gray-800/50 border border-gray-700'
-              } hover:transform hover:scale-105 transition-all duration-200`}
+                  ? 'border-2 border-blue-500/50 bg-blue-500/10 shadow-2xl shadow-blue-500/20 scale-105'
+                  : 'border border-gray-700/50 bg-gray-800/30 hover:border-gray-600/50 hover:bg-gray-800/50'
+              }`}
             >
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-1 rounded-full text-sm font-medium">
+                  <span className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-1">
+                    <StarIcon className="w-4 h-4" />
                     Most Popular
                   </span>
                 </div>
               )}
 
-              {/* Plan Header */}
-              <div className="mb-6">
-                <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
-                <p className="text-gray-400 text-sm mb-4">{plan.description}</p>
-                <div className="flex items-baseline">
+              <div className="text-center">
+                <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                <div className="mb-2">
                   <span className="text-4xl font-bold text-white">{plan.price}</span>
-                  <span className="text-gray-400 ml-1">{plan.period}</span>
+                  {plan.period && <span className="text-gray-400">{plan.period}</span>}
                 </div>
+                <p className="text-gray-400 mb-1">{plan.description}</p>
+                <p className="text-blue-400 font-medium text-sm mb-6">{plan.trial}</p>
               </div>
 
-              {/* Features */}
               <ul className="space-y-3 mb-8">
                 {plan.features.map((feature, index) => (
-                  <li key={index} className="flex items-start">
-                    <CheckIcon className="w-5 h-5 text-green-400 mr-3 mt-0.5 flex-shrink-0" />
-                    <span className="text-gray-300 text-sm">{feature}</span>
+                  <li key={index} className="flex items-start gap-3">
+                    <CheckIcon className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-300">{feature}</span>
                   </li>
                 ))}
               </ul>
 
-              {/* CTA Button */}
               <button
                 onClick={() => handlePlanSelection(plan.id)}
-                disabled={loading === plan.id || currentPlan === plan.id}
-                className={`w-full py-3 rounded-xl font-medium transition-all duration-200 ${
-                  currentPlan === plan.id
+                disabled={loading === plan.id || (currentPlan === plan.id && plan.id !== 'enterprise')}
+                className={`w-full py-4 px-6 rounded-xl font-semibold transition-all duration-200 ${
+                  currentPlan === plan.id && plan.id !== 'enterprise'
                     ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
                     : plan.buttonStyle
                 } ${loading === plan.id ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -285,6 +281,14 @@ const PricingPage: React.FC<PricingPageProps> = ({
           
           <div className="space-y-6">
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-2">How does the 14-day free trial work?</h3>
+              <p className="text-gray-400">
+                Start using OffCall AI immediately with full access to all features. No credit card required 
+                to start. You'll only be charged after your trial ends if you choose to continue.
+              </p>
+            </div>
+
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-2">Can I change plans anytime?</h3>
               <p className="text-gray-400">
                 Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately, 
@@ -293,26 +297,18 @@ const PricingPage: React.FC<PricingPageProps> = ({
             </div>
 
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-2">What payment methods do you accept?</h3>
+              <h3 className="text-lg font-semibold text-white mb-2">What happens after my trial ends?</h3>
               <p className="text-gray-400">
-                We accept all major credit cards (Visa, Mastercard, American Express) and bank transfers 
-                for enterprise customers.
+                If you don't upgrade during your trial, your account will be paused. You can reactivate 
+                anytime by selecting a plan. Your data is safely stored for 30 days.
               </p>
             </div>
 
             <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-2">Is there a free trial?</h3>
+              <h3 className="text-lg font-semibold text-white mb-2">Do you offer annual discounts?</h3>
               <p className="text-gray-400">
-                Yes! Our Free plan gives you full access to basic features forever. 
-                Pro and Plus plans come with a 14-day free trial.
-              </p>
-            </div>
-
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-2">Do you offer discounts for annual billing?</h3>
-              <p className="text-gray-400">
-                Yes, save 20% when you choose annual billing. Contact our sales team for volume discounts 
-                on enterprise plans.
+                Yes! Save 20% when you choose annual billing. Contact our sales team for volume discounts 
+                on Enterprise plans.
               </p>
             </div>
           </div>
@@ -323,9 +319,12 @@ const PricingPage: React.FC<PricingPageProps> = ({
           <p className="text-gray-400 mb-4">
             Need help choosing the right plan?
           </p>
-          <button className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
-            Contact our sales team →
-          </button>
+          <a 
+            href="mailto:support@offcallai.com"
+            className="text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            Contact our team →
+          </a>
         </div>
       </div>
     </div>

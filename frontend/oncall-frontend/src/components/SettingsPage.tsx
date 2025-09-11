@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import APIKeyManagement from './APIKeyManagement';
+import IntegrationsTab from './IntegrationsTab';
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
 interface Integration {

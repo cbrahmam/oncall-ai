@@ -31,6 +31,7 @@ WEBHOOKS_AVAILABLE = False
 TEAMS_AVAILABLE = False
 SLACK_AVAILABLE = False
 AI_AVAILABLE = False
+INTEGRATIONS_AVAILABLE = False
 
 try:
     from app.api.v1.endpoints import incidents
@@ -45,6 +46,13 @@ try:
     print("✅ Webhooks endpoints loaded")
 except ImportError as e:
     print(f"⚠️  Webhooks endpoints not available: {e}")
+
+try:
+    from app.api.v1.endpoints import integrations
+    INTEGRATIONS_AVAILABLE = True
+    print("✅ Integrations endpoints loaded")
+except ImportError as e:
+    print(f"⚠️  Integrations endpoints not available: {e}")
 
 try:
     from app.api.v1.endpoints import teams
@@ -164,6 +172,9 @@ async def lifespan(app: FastAPI):
         
     if WEBSOCKET_AVAILABLE:
         features.append("🔗 WebSocket Notifications")
+    
+    if INTEGRATIONS_AVAILABLE:
+        features.append("🔌 Integration Management")
     
     if features:
         print("🎯 Active Features:")
@@ -303,6 +314,9 @@ if INCIDENTS_AVAILABLE:
 if WEBHOOKS_AVAILABLE:
     app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
 
+if INTEGRATIONS_AVAILABLE:
+    app.include_router(integrations.router, prefix="/api/v1/integrations", tags=["Integrations"])
+
 if TEAMS_AVAILABLE:
     app.include_router(teams.router, prefix="/api/v1/teams", tags=["Teams"])
 
@@ -351,13 +365,15 @@ async def root():
                 "ai_powered": AI_AVAILABLE,
                 "real_time_notifications": WEBSOCKET_AVAILABLE,
                 "multi_factor_auth": ENHANCED_SECURITY_AVAILABLE,
-                "enterprise_ready": OAUTH_AVAILABLE and ENHANCED_SECURITY_AVAILABLE
+                "enterprise_ready": OAUTH_AVAILABLE and ENHANCED_SECURITY_AVAILABLE,
+                "integrations": INTEGRATIONS_AVAILABLE
             },
             "documentation": "/docs",
             "endpoints": {
                 "auth": "/api/v1/auth",
                 "oauth": "/api/v1/oauth" if OAUTH_AVAILABLE else "not_available",
                 "incidents": "/api/v1/incidents" if INCIDENTS_AVAILABLE else "not_available",
+                "integrations": "/api/v1/integrations" if INTEGRATIONS_AVAILABLE else "not_available",
                 "ai": "/api/v1/ai" if AI_AVAILABLE else "not_available"
             }
         }
@@ -440,6 +456,7 @@ if settings.DEBUG:
                         "oauth_support": "oauth_accounts" in tables,
                         "enhanced_security": "user_sessions" in tables,
                         "incidents": "incidents" in tables,
+                        "integrations": "integrations" in tables,
                         "teams": "teams" in tables,
                         "ai_ready": True
                     }
@@ -511,6 +528,13 @@ async def startup_event():
             print("   🔧 Auto Resolution: POST http://localhost:8000/api/v1/ai/suggest-resolution")
             print("   🎯 Alert Classification: POST http://localhost:8000/api/v1/ai/classify-alert")
             print("")
+            
+        if INTEGRATIONS_AVAILABLE:
+            print("🔌 Integration Management:")
+            print("   📊 Integration Stats: GET http://localhost:8000/api/v1/integrations/stats")
+            print("   📋 List Integrations: GET http://localhost:8000/api/v1/integrations/")
+            print("   ➕ Create Integration: POST http://localhost:8000/api/v1/integrations/")
+            print("")
     
     print("🔒 Security Features:")
     if ENHANCED_SECURITY_AVAILABLE:
@@ -525,6 +549,27 @@ async def startup_event():
     print("   🔐 CORS Protection: Active")
     print("   🚫 Host Header Protection: Active")
     print("="*80 + "\n")
+
+# Helper functions for health checks
+async def check_db_health():
+    try:
+        from sqlalchemy import text
+        db_gen = get_async_session()
+        session = await db_gen.__anext__()
+        try:
+            await session.execute(text("SELECT 1"))
+            return "healthy"
+        finally:
+            await session.close()
+    except Exception:
+        return "error"
+
+async def check_redis_health():
+    try:
+        # Add Redis health check if you have Redis configured
+        return "healthy"
+    except Exception:
+        return "error"
 
 if __name__ == "__main__":
     import uvicorn
