@@ -1,4 +1,4 @@
-// frontend/src/components/AuthPages.tsx - Improved design with proper OAuth routing
+// AuthPages.tsx - Fixed OAuth endpoints and default login mode
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -21,7 +21,7 @@ interface AuthPagesProps {
 const AuthPages: React.FC<AuthPagesProps> = ({ 
   onLoginSuccess, 
   onNavigateToLanding, 
-  defaultMode = 'register'
+  defaultMode = 'login'  // FIXED: Changed from 'register' to 'login'
 }) => {
   const [currentMode, setCurrentMode] = useState<'login' | 'register'>(defaultMode);
   const [showPassword, setShowPassword] = useState(false);
@@ -114,6 +114,12 @@ const AuthPages: React.FC<AuthPagesProps> = ({
     try {
       if (currentMode === 'login') {
         await login(formData.email, formData.password);
+        showToast({
+          type: 'success',
+          title: 'Welcome back!',
+          message: 'Successfully signed in to OffCall AI',
+          autoClose: true,
+        });
       } else {
         await register(
           formData.email, 
@@ -121,24 +127,71 @@ const AuthPages: React.FC<AuthPagesProps> = ({
           formData.full_name, 
           formData.organization_name
         );
+        showToast({
+          type: 'success',
+          title: 'Account Created!',
+          message: 'Welcome to OffCall AI. You can now start managing incidents.',
+          autoClose: true,
+        });
       }
       onLoginSuccess();
     } catch (error: any) {
+      console.error('Authentication error:', error);
       showToast({
         type: 'error',
-        title: 'Authentication Failed',
-        message: error.message || 'Please check your credentials and try again.'
+        title: currentMode === 'login' ? 'Sign In Failed' : 'Registration Failed',
+        message: error.message || 'Please check your information and try again.',
+        autoClose: true,
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Fixed OAuth handlers with correct endpoints
-  const handleOAuthLogin = (provider: 'google' | 'microsoft' | 'github') => {
-    const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-    // FIXED: Correct OAuth endpoint path
-    window.location.href = `${baseUrl}/api/v1/oauth/authorize/${provider}`;
+  // FIXED: OAuth handlers with proper error handling and redirect URI
+  const handleOAuthLogin = async (provider: 'google' | 'microsoft' | 'github') => {
+    try {
+      const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const redirectUri = `${window.location.origin}/auth/oauth/callback`;
+      
+      showToast({
+        type: 'info',
+        title: 'Redirecting...',
+        message: `Connecting to ${provider.charAt(0).toUpperCase() + provider.slice(1)}`,
+        autoClose: true,
+      });
+
+      // FIXED: Use the correct OAuth authorize endpoint from your backend
+      const response = await fetch(`${baseUrl}/api/v1/oauth/authorize/${provider}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          redirect_uri: redirectUri
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.authorization_url) {
+          window.location.href = data.authorization_url;
+        } else {
+          throw new Error('No authorization URL received');
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `${provider} OAuth not configured`);
+      }
+    } catch (error: any) {
+      console.error('OAuth error:', error);
+      showToast({
+        type: 'error',
+        title: 'OAuth Error',
+        message: `${provider.charAt(0).toUpperCase() + provider.slice(1)} sign-in is not available yet. Please use email/password.`,
+        autoClose: true,
+      });
+    }
   };
 
   return (
@@ -164,7 +217,7 @@ const AuthPages: React.FC<AuthPagesProps> = ({
         {/* Auth Card */}
         <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-8">
           
-          {/* OAuth Buttons */}
+          {/* OAuth Buttons - FIXED: Proper API integration */}
           <div className="space-y-3 mb-6">
             <button
               onClick={() => handleOAuthLogin('google')}
@@ -206,7 +259,7 @@ const AuthPages: React.FC<AuthPagesProps> = ({
               <div className="w-full border-t border-white/20"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-black text-gray-400">or continue with email</span>
+              <span className="px-2 bg-gray-900 text-gray-400">or continue with email</span>
             </div>
           </div>
 
@@ -225,7 +278,9 @@ const AuthPages: React.FC<AuthPagesProps> = ({
                       name="full_name"
                       value={formData.full_name}
                       onChange={handleInputChange}
-                      className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                      className={`w-full pl-10 pr-4 py-3 bg-white/10 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent ${
+                        errors.full_name ? 'border-red-500' : 'border-white/20'
+                      }`}
                       placeholder="Enter your full name"
                     />
                   </div>
@@ -241,7 +296,9 @@ const AuthPages: React.FC<AuthPagesProps> = ({
                       name="organization_name"
                       value={formData.organization_name}
                       onChange={handleInputChange}
-                      className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                      className={`w-full pl-10 pr-4 py-3 bg-white/10 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent ${
+                        errors.organization_name ? 'border-red-500' : 'border-white/20'
+                      }`}
                       placeholder="Enter your organization name"
                     />
                   </div>
@@ -260,7 +317,9 @@ const AuthPages: React.FC<AuthPagesProps> = ({
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                  className={`w-full pl-10 pr-4 py-3 bg-white/10 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent ${
+                    errors.email ? 'border-red-500' : 'border-white/20'
+                  }`}
                   placeholder="Enter your email"
                 />
               </div>
@@ -277,7 +336,9 @@ const AuthPages: React.FC<AuthPagesProps> = ({
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="w-full pl-10 pr-12 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                  className={`w-full pl-10 pr-12 py-3 bg-white/10 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent ${
+                    errors.password ? 'border-red-500' : 'border-white/20'
+                  }`}
                   placeholder="Enter your password"
                 />
                 <button
@@ -302,7 +363,9 @@ const AuthPages: React.FC<AuthPagesProps> = ({
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
-                    className="w-full pl-10 pr-12 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                    className={`w-full pl-10 pr-12 py-3 bg-white/10 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent ${
+                      errors.confirmPassword ? 'border-red-500' : 'border-white/20'
+                    }`}
                     placeholder="Confirm your password"
                   />
                   <button

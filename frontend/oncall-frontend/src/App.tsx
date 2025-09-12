@@ -1,4 +1,4 @@
-// frontend/src/App.tsx - Updated with subscription enforcement and protected routes
+// App.tsx - Clean version with only the specific fixes requested
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext';
@@ -14,12 +14,13 @@ import NotificationSettings from './components/NotificationSettings';
 import IncidentDetail from './components/IncidentDetail';
 import PricingPage from './components/PricingPage';
 import UpgradePage from './components/UpgradePage';
-import { BellIcon, Cog6ToothIcon, LockClosedIcon } from '@heroicons/react/24/outline';
+import PlanSelection from './components/PlanSelection';
+import { BellIcon, Cog6ToothIcon, LockClosedIcon, UserIcon } from '@heroicons/react/24/outline';
 
-// Updated Page type to include new pages
+// Page type
 type Page = 'landing' | 'auth' | 'dashboard' | 'settings' | 'profile' | 'notifications' | 'incident-detail' | 'oauth-callback' | 'pricing' | 'upgrade' | 'plan-selection';
 
-// Subscription check hook
+// Subscription hook
 const useSubscription = () => {
   const { user } = useAuth();
   const [subscription, setSubscription] = useState<any>(null);
@@ -72,225 +73,38 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
   children, 
   requireSubscription = false, 
-  allowedPlans = ['free', 'pro', 'enterprise'],
+  allowedPlans = [],
   onUpgradeRequired 
 }) => {
-  const { isAuthenticated, user } = useAuth();
-  const { subscription, loading } = useSubscription();
-  const { showToast } = useNotifications();
+  const { subscription, hasValidSubscription, loading } = useSubscription();
 
-  // Show loading while checking subscription
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
-  // Check authentication
-  if (!isAuthenticated || !user) {
+  if (requireSubscription && !hasValidSubscription) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl text-white mb-4">Authentication Required</h2>
-          <p className="text-gray-400">Please log in to access this page.</p>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-screen p-8">
+        <LockClosedIcon className="w-16 h-16 text-gray-400 mb-4" />
+        <h2 className="text-2xl font-bold text-white mb-2">Subscription Required</h2>
+        <p className="text-gray-400 text-center mb-6">
+          This feature requires an active Pro or Enterprise subscription.
+        </p>
+        <button
+          onClick={onUpgradeRequired}
+          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200"
+        >
+          Upgrade Now
+        </button>
       </div>
     );
   }
 
-  // Check subscription requirements
-  if (requireSubscription && (!subscription || !subscription.active)) {
-    showToast({
-      type: 'warning',
-      title: 'Subscription Required',
-      message: 'This feature requires an active subscription. Please upgrade your plan.',
-      autoClose: true,
-      duration: 5000
-    });
-
-    if (onUpgradeRequired) onUpgradeRequired();
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-6">
-          <LockClosedIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-4">Subscription Required</h2>
-          <p className="text-gray-400 mb-6">
-            This feature is available for Pro and Enterprise subscribers. Upgrade your plan to access advanced functionality.
-          </p>
-          <button
-            onClick={onUpgradeRequired}
-            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200"
-          >
-            Upgrade Now
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Check plan requirements
-  if (subscription && !allowedPlans.includes(subscription.plan_type)) {
-    showToast({
-      type: 'warning',
-      title: 'Plan Upgrade Required',
-      message: `This feature requires ${allowedPlans.filter(p => p !== 'free').join(' or ')} plan.`,
-      autoClose: true,
-      duration: 5000
-    });
-
-    if (onUpgradeRequired) onUpgradeRequired();
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-6">
-          <LockClosedIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-4">Plan Upgrade Required</h2>
-          <p className="text-gray-400 mb-6">
-            This feature requires {allowedPlans.filter(p => p !== 'free').join(' or ')} plan. 
-            Current plan: {subscription?.plan_type || 'Free'}
-          </p>
-          <button
-            onClick={onUpgradeRequired}
-            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200"
-          >
-            Upgrade Plan
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // All checks passed, render the protected content
   return <>{children}</>;
-};
-
-// Plan Selection Component (shown after signup)
-const PlanSelection: React.FC<{ onPlanSelected: () => void }> = ({ onPlanSelected }) => {
-  const { showToast } = useNotifications();
-  const [loading, setLoading] = useState(false);
-
-  const handlePlanSelection = async (planType: string) => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('access_token');
-      
-      if (planType === 'free') {
-        // For free plan, just mark as selected
-        onPlanSelected();
-        showToast({
-          type: 'success',
-          title: 'Plan Selected',
-          message: 'Welcome to OffCall AI! You can upgrade anytime from settings.',
-          autoClose: true,
-        });
-        return;
-      }
-
-      // For paid plans, redirect to Stripe
-      const response = await fetch('/api/v1/billing/create-checkout-session', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ plan_type: planType }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        window.location.href = data.checkout_url;
-      } else {
-        throw new Error('Failed to create checkout session');
-      }
-    } catch (error) {
-      showToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to process plan selection. Please try again.',
-        autoClose: true,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center p-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">Choose Your Plan</h1>
-          <p className="text-xl text-gray-400">Select the plan that best fits your needs to get started</p>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Free Plan */}
-          <div className="border border-gray-700 rounded-xl p-6 bg-gray-800/50">
-            <h3 className="text-xl font-bold text-white mb-2">Free</h3>
-            <p className="text-3xl font-bold text-white mb-4">$0<span className="text-sm text-gray-400">/month</span></p>
-            <ul className="text-gray-300 mb-6 space-y-2">
-              <li>• Up to 5 incidents/month</li>
-              <li>• Basic notifications</li>
-              <li>• Email support</li>
-              <li>• Community access</li>
-            </ul>
-            <button
-              onClick={() => handlePlanSelection('free')}
-              disabled={loading}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-lg font-medium transition-colors"
-            >
-              Get Started Free
-            </button>
-          </div>
-
-          {/* Pro Plan */}
-          <div className="border border-blue-500 rounded-xl p-6 bg-blue-500/10 relative">
-            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-              <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm">Most Popular</span>
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2">Pro</h3>
-            <p className="text-3xl font-bold text-white mb-4">$49<span className="text-sm text-gray-400">/month</span></p>
-            <ul className="text-gray-300 mb-6 space-y-2">
-              <li>• Unlimited incidents</li>
-              <li>• AI-powered insights</li>
-              <li>• Advanced integrations</li>
-              <li>• Priority support</li>
-              <li>• Custom alerting</li>
-            </ul>
-            <button
-              onClick={() => handlePlanSelection('pro')}
-              disabled={loading}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors"
-            >
-              Start Pro Trial
-            </button>
-          </div>
-
-          {/* Enterprise Plan */}
-          <div className="border border-gray-700 rounded-xl p-6 bg-gray-800/50">
-            <h3 className="text-xl font-bold text-white mb-2">Enterprise</h3>
-            <p className="text-3xl font-bold text-white mb-4">Custom</p>
-            <ul className="text-gray-300 mb-6 space-y-2">
-              <li>• Everything in Pro</li>
-              <li>• SSO integration</li>
-              <li>• Custom workflows</li>
-              <li>• Dedicated support</li>
-              <li>• SLA guarantees</li>
-            </ul>
-            <button
-              onClick={() => handlePlanSelection('enterprise')}
-              disabled={loading}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-medium transition-colors"
-            >
-              Contact Sales
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 };
 
 const AppContent: React.FC = () => {
@@ -302,10 +116,9 @@ const AppContent: React.FC = () => {
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [hasSelectedPlan, setHasSelectedPlan] = useState(false);
 
-  // Check if user needs to select a plan (new users)
+  // Check if user needs to select a plan
   useEffect(() => {
     if (isAuthenticated && user && !subscription) {
-      // New user without subscription - show plan selection
       const planSelected = localStorage.getItem(`plan_selected_${user.id}`);
       if (!planSelected) {
         setCurrentPage('plan-selection');
@@ -315,9 +128,9 @@ const AppContent: React.FC = () => {
     }
   }, [isAuthenticated, user, subscription]);
 
-  // Simple client-side routing with proper navigation
+  // Simple client-side routing
   useEffect(() => {
-    if (currentPage === 'plan-selection') return; // Don't override plan selection
+    if (currentPage === 'plan-selection') return;
 
     const path = window.location.pathname;
     const incidentMatch = path.match(/\/incidents\/([a-zA-Z0-9-]+)/);
@@ -360,7 +173,7 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [currentPage]);
 
-  // Welcome notification for authenticated users (only show once)
+  // Welcome notification
   useEffect(() => {
     if (isAuthenticated && user && currentPage === 'dashboard') {
       const timer = setTimeout(() => {
@@ -377,7 +190,7 @@ const AppContent: React.FC = () => {
     }
   }, [isAuthenticated, user, currentPage, showToast]);
 
-  // Navigation function with proper URL updates
+  // Navigation function
   const navigate = (page: Page, incidentId?: string) => {
     setCurrentPage(page);
     if (page === 'incident-detail' && incidentId) {
@@ -397,12 +210,11 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // Handle navigation from landing page to register (not login)
+  // FIXED: Handle navigation from landing page to LOGIN (not register)
   const handleNavigateToAuth = () => {
     navigate('auth');
   };
 
-  // Handle plan selection completion
   const handlePlanSelected = () => {
     if (user) {
       localStorage.setItem(`plan_selected_${user.id}`, 'true');
@@ -411,12 +223,11 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // Handle upgrade requirement
   const handleUpgradeRequired = () => {
     navigate('pricing');
   };
 
-  // Navigation Header Component for authenticated users with subscription indicators
+  // FIXED: Navigation Header with working settings button
   const NavigationHeader = () => (
     <nav className="backdrop-blur-xl border-b border-gray-800/50 sticky top-0 z-30 bg-black/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -435,12 +246,10 @@ const AppContent: React.FC = () => {
               OffCall AI
             </button>
             
-            {/* Plan Badge */}
-            {subscription && (
+            {/* Plan Badge - FIXED: Remove FREE plan badge */}
+            {subscription && subscription.plan_type !== 'free' && (
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                subscription.plan_type === 'free' 
-                  ? 'bg-gray-700 text-gray-300' 
-                  : subscription.plan_type === 'pro'
+                subscription.plan_type === 'pro'
                   ? 'bg-blue-500/20 text-blue-300'
                   : 'bg-purple-500/20 text-purple-300'
               }`}>
@@ -496,9 +305,10 @@ const AppContent: React.FC = () => {
                   </span>
                 )}
               </button>
-              
+
+              {/* Notification Center */}
               {showNotificationCenter && (
-                <div className="absolute right-0 top-12 z-50">
+                <div className="absolute right-0 top-full mt-2 z-50">
                   <NotificationCenter 
                     isOpen={showNotificationCenter}
                     onClose={() => setShowNotificationCenter(false)} 
@@ -507,32 +317,29 @@ const AppContent: React.FC = () => {
               )}
             </div>
 
-            {/* Settings */}
+            {/* FIXED: Settings Icon Button */}
             <button
               onClick={() => navigate('settings')}
-              className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+              className={`p-2 rounded-lg transition-colors ${
+                currentPage === 'settings' ? 'bg-gray-700 text-blue-400' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              }`}
             >
               <Cog6ToothIcon className="w-5 h-5" />
             </button>
 
-            {/* User Profile */}
+            {/* User Menu */}
             <div className="relative">
               <button
                 onClick={() => navigate('profile')}
-                className="flex items-center space-x-2 p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                className={`p-2 rounded-lg transition-colors ${
+                  currentPage === 'profile' ? 'bg-gray-700 text-blue-400' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
               >
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
-                    {user?.full_name?.charAt(0)?.toUpperCase() || 'U'}
-                  </span>
-                </div>
-                <span className="hidden sm:block text-sm font-medium">
-                  {user?.full_name || 'User'}
-                </span>
+                <UserIcon className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Logout Button */}
+            {/* Logout */}
             <button
               onClick={logout}
               className="text-gray-400 hover:text-red-400 transition-colors px-3 py-2 text-sm font-medium"
@@ -545,7 +352,7 @@ const AppContent: React.FC = () => {
     </nav>
   );
 
-  // Show loading spinner
+  // Loading spinner
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
@@ -568,35 +375,34 @@ const AppContent: React.FC = () => {
       return <PlanSelection onPlanSelected={handlePlanSelected} />;
     }
 
-    // OAuth callback page (always accessible)
+    // OAuth callback page
     if (currentPage === 'oauth-callback') {
       return <OAuthCallback onComplete={() => navigate('dashboard')} />;
     }
 
-    // Landing page (only for non-authenticated users)
+    // Landing page
     if (currentPage === 'landing') {
       return <LandingPage onNavigateToAuth={handleNavigateToAuth} />;
     }
 
-    // Pricing page (accessible to all)
+    // Pricing page
     if (currentPage === 'pricing') {
       return <PricingPage onPlanSelected={handlePlanSelected} />;
     }
 
-    // Auth pages (login/register)
+    // FIXED: Auth pages with LOGIN as default (was "register")
     if (currentPage === 'auth') {
       return (
         <AuthPages 
           onLoginSuccess={() => navigate('dashboard')} 
           onNavigateToLanding={() => navigate('landing')}
-          defaultMode="register"
+          defaultMode="login"
         />
       );
     }
 
     // Protected pages (require authentication)
     if (!isAuthenticated) {
-      // Redirect to auth if trying to access protected page
       navigate('auth');
       return (
         <AuthPages 
@@ -607,7 +413,7 @@ const AppContent: React.FC = () => {
       );
     }
 
-    // Authenticated user pages with subscription protection
+    // Authenticated user pages
     switch (currentPage) {
       case 'dashboard':
         return (
@@ -665,7 +471,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
-      {/* Show navigation header only for authenticated users and not on landing/auth pages */}
+      {/* Navigation header for authenticated users */}
       {isAuthenticated && currentPage !== 'landing' && currentPage !== 'auth' && currentPage !== 'plan-selection' && <NavigationHeader />}
       
       {/* Main content */}
@@ -679,7 +485,7 @@ const AppContent: React.FC = () => {
   );
 };
 
-// Main App component
+// Root App Component
 const App: React.FC = () => {
   return (
     <AuthProvider>

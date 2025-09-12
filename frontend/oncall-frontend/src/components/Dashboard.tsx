@@ -1,4 +1,4 @@
-// frontend/src/components/Dashboard.tsx - REAL INCIDENT INTEGRATION WITH AI ANALYSIS
+// Dashboard.tsx - REAL DATA ONLY, NO MOCK DATA
 import React, { useState, useEffect } from 'react';
 import { 
   FireIcon, 
@@ -58,6 +58,7 @@ interface DashboardStats {
   resolved_today: number;
   avg_response_time: string;
   team_members: number;
+  sla_compliance: string;
 }
 
 interface DashboardProps {
@@ -68,7 +69,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
   const { user } = useAuth();
   const { showToast } = useNotifications();
   
-  // Real state for incidents
+  // Real state for incidents - NO MOCK DATA
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     total_incidents: 0,
@@ -76,23 +77,72 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
     critical_incidents: 0,
     resolved_today: 0,
     avg_response_time: '0m',
-    team_members: 1
+    team_members: 1,
+    sla_compliance: '0%'
   });
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [analyzingIncident, setAnalyzingIncident] = useState<string | null>(null);
   const [aiAnalyses, setAiAnalyses] = useState<Record<string, AIAnalysis[]>>({});
 
-  // Load real incidents from API
+  // Load real incidents from API ONLY
   useEffect(() => {
     loadIncidents();
     const interval = setInterval(loadIncidents, 30000); // Refresh every 30s
     return () => clearInterval(interval);
   }, []);
 
+  const calculateAverageResponseTime = (incidents: Incident[]): string => {
+    const resolvedIncidents = incidents.filter(i => i.status === 'resolved' && i.resolved_at);
+    if (resolvedIncidents.length === 0) return '0m';
+
+    const totalMinutes = resolvedIncidents.reduce((acc, incident) => {
+      const created = new Date(incident.created_at);
+      const resolved = new Date(incident.resolved_at!);
+      const minutes = Math.floor((resolved.getTime() - created.getTime()) / (1000 * 60));
+      return acc + minutes;
+    }, 0);
+
+    const avgMinutes = Math.floor(totalMinutes / resolvedIncidents.length);
+    if (avgMinutes < 60) return `${avgMinutes}m`;
+    const hours = Math.floor(avgMinutes / 60);
+    const minutes = avgMinutes % 60;
+    return `${hours}h ${minutes}m`;
+  };
+
+  const calculateSLACompliance = (incidents: Incident[]): string => {
+    if (incidents.length === 0) return '0%';
+    
+    // Define SLA targets by severity
+    const slaTargets = {
+      critical: 15, // 15 minutes
+      high: 30,     // 30 minutes  
+      medium: 60,   // 1 hour
+      low: 240      // 4 hours
+    };
+
+    const resolvedIncidents = incidents.filter(i => i.status === 'resolved' && i.resolved_at);
+    if (resolvedIncidents.length === 0) return '0%';
+
+    const withinSLA = resolvedIncidents.filter(incident => {
+      const created = new Date(incident.created_at);
+      const resolved = new Date(incident.resolved_at!);
+      const responseMinutes = Math.floor((resolved.getTime() - created.getTime()) / (1000 * 60));
+      const slaTarget = slaTargets[incident.severity] || 60;
+      return responseMinutes <= slaTarget;
+    });
+
+    const compliance = Math.floor((withinSLA.length / resolvedIncidents.length) * 100);
+    return `${compliance}%`;
+  };
+
   const loadIncidents = async () => {
     try {
       const token = localStorage.getItem('access_token');
+      if (!token) {
+        throw new Error('No access token');
+      }
+
       const response = await fetch(`${API_BASE_URL}/incidents/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -104,7 +154,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
         const data: IncidentListResponse = await response.json();
         setIncidents(data.incidents);
         
-        // Calculate real stats from incidents
+        // Calculate real stats from actual incidents
         const openIncidents = data.incidents.filter(i => i.status === 'open');
         const criticalIncidents = data.incidents.filter(i => i.severity === 'critical');
         
@@ -121,26 +171,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
           open_incidents: openIncidents.length,
           critical_incidents: criticalIncidents.length,
           resolved_today: resolvedToday.length,
-          avg_response_time: '8m', // TODO: Calculate from real data
-          team_members: 1
+          avg_response_time: calculateAverageResponseTime(data.incidents),
+          team_members: 1, // TODO: Get from API
+          sla_compliance: calculateSLACompliance(data.incidents)
         });
+      } else if (response.status === 401) {
+        // Token expired or invalid
+        localStorage.removeItem('access_token');
+        window.location.reload();
       } else {
-        throw new Error('Failed to load incidents');
+        throw new Error(`HTTP ${response.status}`);
       }
     } catch (error) {
       console.error('Error loading incidents:', error);
-      showToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to load incidents',
-        autoClose: true,
-      });
+      // Only show error if we have a valid token and this isn't the first load
+      if (localStorage.getItem('access_token') && !loading) {
+        showToast({
+          type: 'error',
+          title: 'Error',
+          message: 'Failed to load incidents. Please refresh the page.',
+          autoClose: true,
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Create new incident
   const createIncident = async (incidentData: {title: string, description: string, severity: string}) => {
     try {
       const token = localStorage.getItem('access_token');
@@ -178,7 +235,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
     }
   };
 
-  // YOUR CORE VISION: Analyze incident with both Claude and Gemini
+  // FIXED: Real AI analysis with actual API call
   const analyzeIncidentWithAI = async (incident: Incident) => {
     setAnalyzingIncident(incident.id);
     
@@ -188,82 +245,50 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
       showToast({
         type: 'info',
         title: 'AI Analysis Started',
-        message: 'Getting insights from Claude and Gemini...',
+        message: 'Getting insights from AI...',
         autoClose: true,
       });
       
-      // Call both Claude and Gemini in parallel (when endpoint exists)
-      // Updated to use the new AI analysis endpoint
-      const analyses: AIAnalysis[] = [
-        {
-          provider: 'claude',
-          summary: `Based on the incident "${incident.title}", this appears to be a ${incident.severity} severity issue requiring immediate attention. The symptoms suggest potential infrastructure problems.`,
-          recommended_actions: [
-            'Check database connection pool status',
-            'Verify network connectivity to primary database',
-            'Review recent configuration changes',
-            'Monitor connection timeout patterns'
-          ],
-          confidence_score: 85,
-          analysis_time: new Date().toISOString()
+      // REAL API CALL - Replace mock data with actual endpoint
+      const response = await fetch(`${API_BASE_URL}/ai/analyze-incident`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-        {
-          provider: 'gemini',
-          summary: `This ${incident.severity} incident titled "${incident.title}" indicates system performance degradation. Immediate investigation of backend services is recommended.`,
-          recommended_actions: [
-            'Restart database connection service',
-            'Scale up database resources temporarily',
-            'Check for blocked queries',
-            'Review error logs for patterns'
-          ],
-          confidence_score: 78,
-          analysis_time: new Date().toISOString()
-        }
-      ];
-
-      // TODO: Replace with real API call once you add API keys
-      // const response = await fetch('/api/v1/ai-analysis/analyze-incident', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Authorization': `Bearer ${token}`,
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({
-      //     incident_id: incident.id,
-      //     provider: 'both',
-      //     incident_data: {
-      //       title: incident.title,
-      //       description: incident.description,
-      //       severity: incident.severity
-      //     }
-      //   }),
-      // });
-      // 
-      // if (response.ok) {
-      //   const data = await response.json();
-      //   const analyses = [];
-      //   if (data.claude_analysis) analyses.push(data.claude_analysis);
-      //   if (data.gemini_analysis) analyses.push(data.gemini_analysis);
-      // }
-      
-      setAiAnalyses(prev => ({
-        ...prev,
-        [incident.id]: analyses
-      }));
-      
-      showToast({
-        type: 'success',
-        title: 'AI Analysis Complete',
-        message: 'Claude and Gemini have analyzed the incident',
-        autoClose: true,
+        body: JSON.stringify({
+          incident_id: incident.id,
+          incident_data: {
+            title: incident.title,
+            description: incident.description,
+            severity: incident.severity
+          }
+        }),
       });
-      
+
+      if (response.ok) {
+        const data = await response.json();
+        setAiAnalyses(prev => ({
+          ...prev,
+          [incident.id]: data.analyses || []
+        }));
+        
+        showToast({
+          type: 'success',
+          title: 'AI Analysis Complete',
+          message: 'AI has analyzed the incident',
+          autoClose: true,
+        });
+      } else {
+        throw new Error('AI analysis failed');
+      }
+        
     } catch (error) {
       console.error('Error analyzing incident:', error);
       showToast({
         type: 'error',
         title: 'Analysis Failed',
-        message: 'Could not analyze incident with AI',
+        message: 'AI analysis is not available. Please configure your AI API keys in settings.',
         autoClose: true,
       });
     } finally {
@@ -271,7 +296,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
     }
   };
 
-  // Acknowledge incident
   const acknowledgeIncident = async (incidentId: string) => {
     try {
       const token = localStorage.getItem('access_token');
@@ -297,7 +321,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
     }
   };
 
-  // Resolve incident
   const resolveIncident = async (incidentId: string) => {
     try {
       const token = localStorage.getItem('access_token');
@@ -323,7 +346,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
     }
   };
 
-  // Component Tiles
+  // FIXED: StatTile without hardcoded trends
   const StatTile = ({ title, value, icon: Icon, color, trend }: any) => (
     <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 hover:border-gray-600/50 transition-all duration-200">
       <div className="flex items-center justify-between mb-4">
@@ -464,7 +487,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
           </div>
         </div>
 
-        {/* AI Analysis Section - YOUR CORE DIFFERENTIATOR */}
+        {/* AI Analysis Section */}
         {analysis && analysis.length > 0 && (
           <div className="mt-4 p-3 bg-gray-800/50 rounded-lg border border-gray-600/30">
             <h5 className="text-white font-medium mb-2 flex items-center">
@@ -556,7 +579,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-white mb-2">
-                Welcome back, {user?.full_name || 'User'}
+                Welcome back, {user?.full_name || user?.email?.split('@')[0] || 'User'}
               </h1>
               <p className="text-gray-400">
                 Here's what's happening with your incidents today.
@@ -573,41 +596,37 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
           </div>
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats Grid - FIXED: No hardcoded trends */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatTile
             title="Total Incidents"
             value={stats.total_incidents}
             icon={BellIcon}
             color="bg-blue-500"
-            trend={12}
           />
           <StatTile
             title="Open Incidents"
             value={stats.open_incidents}
             icon={ExclamationTriangleIcon}
             color="bg-orange-500"
-            trend={-8}
           />
           <StatTile
             title="Critical Incidents"
             value={stats.critical_incidents}
             icon={FireIcon}
             color="bg-red-500"
-            trend={-15}
           />
           <StatTile
             title="Resolved Today"
             value={stats.resolved_today}
             icon={CheckCircleIcon}
             color="bg-green-500"
-            trend={25}
           />
         </div>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-          {/* Recent Incidents - Takes 2 columns */}
+          {/* Recent Incidents */}
           <div className="lg:col-span-2">
             <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6">
               <div className="flex items-center justify-between mb-6">
@@ -655,7 +674,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
             </div>
           </div>
 
-          {/* System Status - Takes 1 column */}
+          {/* System Status & AI */}
           <div>
             <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 mb-6">
               <div className="flex items-center justify-between mb-4">
@@ -688,7 +707,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
                 <h3 className="text-lg font-semibold text-white">AI-Powered Analysis</h3>
               </div>
               <p className="text-gray-300 text-sm mb-4">
-                Get instant insights from Claude and Gemini AI to resolve incidents faster.
+                Get instant insights from AI to resolve incidents faster. Configure your API keys in settings.
               </p>
               <div className="flex items-center space-x-2 text-xs text-gray-400">
                 <CpuChipIcon className="w-4 h-4" />
@@ -698,14 +717,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
           </div>
         </div>
 
-        {/* Additional Stats Grid */}
+        {/* Additional Stats Grid - FIXED: Real SLA compliance */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatTile
             title="Avg Response Time"
             value={stats.avg_response_time}
             icon={ClockIcon}
             color="bg-purple-500"
-            trend={-5}
           />
           <StatTile
             title="Team Members"
@@ -715,10 +733,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
           />
           <StatTile
             title="SLA Compliance"
-            value="98.5%"
+            value={stats.sla_compliance}
             icon={ShieldCheckIcon}
             color="bg-emerald-500"
-            trend={2}
           />
         </div>
       </div>
