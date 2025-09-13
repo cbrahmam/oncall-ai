@@ -161,20 +161,26 @@ const AuthPages: React.FC<AuthPagesProps> = ({
         autoClose: true,
       });
 
-      // FIXED: Use the correct OAuth authorize endpoint from your backend
-      const response = await fetch(`${baseUrl}/api/v1/oauth/authorize/${provider}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          redirect_uri: redirectUri
-        })
-      });
+      // ✅ FIXED: Using GET method with query parameter
+      const response = await fetch(
+        `${baseUrl}/api/v1/oauth/authorize/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}`,
+        {
+          method: 'GET',  // <-- FIXED: Changed to GET
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
       if (response.ok) {
         const data = await response.json();
         if (data.authorization_url) {
+          // Store state for security
+          if (data.state) {
+            localStorage.setItem('oauth_state', data.state);
+          }
+          localStorage.setItem('oauth_provider', provider);
+          
           window.location.href = data.authorization_url;
         } else {
           throw new Error('No authorization URL received');
@@ -188,7 +194,7 @@ const AuthPages: React.FC<AuthPagesProps> = ({
       showToast({
         type: 'error',
         title: 'OAuth Error',
-        message: `${provider.charAt(0).toUpperCase() + provider.slice(1)} sign-in is not available yet. Please use email/password.`,
+        message: error.message || `${provider.charAt(0).toUpperCase() + provider.slice(1)} sign-in is not available yet.`,
         autoClose: true,
       });
     }
