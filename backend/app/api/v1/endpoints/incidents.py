@@ -13,7 +13,26 @@ from app.models.audit_log import AuditLog
 from app.core.security import get_current_user
 from app.schemas.incident import IncidentResponse, IncidentUpdate
 from app.services.ai_service import EnhancedAIService as AIService
+from pydantic import BaseModel
+import logging
 
+logger = logging.getLogger(__name__)
+
+class IncidentCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    severity: str = "MEDIUM"
+
+class IncidentResponse(BaseModel):
+    id: str
+    title: str
+    description: Optional[str]
+    severity: str
+    status: str
+    created_at: str
+    organization_id: str
+
+    
 # Add these new endpoints to your existing router
 router = APIRouter()
 

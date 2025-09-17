@@ -1,4 +1,5 @@
-// App.tsx - Clean version with only the specific fixes requested
+// frontend/oncall-frontend/src/App.tsx - UPDATED with AI Components Integration
+
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider, useNotifications } from './contexts/NotificationContext';
@@ -15,12 +16,17 @@ import IncidentDetail from './components/IncidentDetail';
 import PricingPage from './components/PricingPage';
 import UpgradePage from './components/UpgradePage';
 import PlanSelection from './components/PlanSelection';
+
+// NEW AI COMPONENTS
+import AIAnalysisDisplay from './components/AIAnalysisDisplay';
+import AIDeploymentInterface from './components/AIDeploymentInterface';
+
 import { BellIcon, Cog6ToothIcon, LockClosedIcon, UserIcon } from '@heroicons/react/24/outline';
 
-// Page type
-type Page = 'landing' | 'auth' | 'dashboard' | 'settings' | 'profile' | 'notifications' | 'incident-detail' | 'oauth-callback' | 'pricing' | 'upgrade' | 'plan-selection';
+// UPDATED Page type with new AI pages
+type Page = 'landing' | 'auth' | 'dashboard' | 'settings' | 'profile' | 'notifications' | 'incident-detail' | 'oauth-callback' | 'pricing' | 'upgrade' | 'plan-selection' | 'ai-analysis' | 'ai-deployment';
 
-// Subscription hook
+// Subscription hook (unchanged)
 const useSubscription = () => {
   const { user } = useAuth();
   const [subscription, setSubscription] = useState<any>(null);
@@ -62,7 +68,7 @@ const useSubscription = () => {
   return { subscription, hasValidSubscription, isFreePlan, loading };
 };
 
-// Protected Route Component
+// Protected Route Component (unchanged)
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requireSubscription?: boolean;
@@ -115,6 +121,13 @@ const AppContent: React.FC = () => {
   const [currentIncidentId, setCurrentIncidentId] = useState<string | null>(null);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [hasSelectedPlan, setHasSelectedPlan] = useState(false);
+  
+  // NEW STATE for AI components
+  const [aiAnalysisData, setAiAnalysisData] = useState<{
+    incidentId: string;
+    provider?: 'claude' | 'gemini';
+    solution?: any;
+  } | null>(null);
 
   // Check if user needs to select a plan
   useEffect(() => {
@@ -128,9 +141,9 @@ const AppContent: React.FC = () => {
     }
   }, [isAuthenticated, user, subscription]);
 
-  // Simple client-side routing
+  // UPDATED routing with AI pages
   useEffect(() => {
-    if (currentPage === 'plan-selection') return;
+    if (currentPage === 'plan-selection' || currentPage === 'ai-analysis' || currentPage === 'ai-deployment') return;
 
     const path = window.location.pathname;
     const incidentMatch = path.match(/\/incidents\/([a-zA-Z0-9-]+)/);
@@ -190,7 +203,7 @@ const AppContent: React.FC = () => {
     }
   }, [isAuthenticated, user, currentPage, showToast]);
 
-  // Navigation function
+  // UPDATED navigation function
   const navigate = (page: Page, incidentId?: string) => {
     setCurrentPage(page);
     if (page === 'incident-detail' && incidentId) {
@@ -205,12 +218,67 @@ const AppContent: React.FC = () => {
       else if (page === 'oauth-callback') url = '/auth/oauth/callback';
       else if (page === 'pricing') url = '/pricing';
       else if (page === 'upgrade') url = '/upgrade';
+      else if (page === 'ai-analysis') url = '/ai-analysis';
+      else if (page === 'ai-deployment') url = '/ai-deployment';
       else url = `/${page}`;
       window.history.pushState(null, '', url);
     }
   };
 
-  // FIXED: Handle navigation from landing page to LOGIN (not register)
+  // NEW: AI Analysis navigation handlers
+  const handleShowAIAnalysis = (incidentId: string) => {
+    setAiAnalysisData({ incidentId });
+    setCurrentPage('ai-analysis');
+  };
+
+  const handleAIDeploymentSelect = (provider: 'claude' | 'gemini', solution: any) => {
+    if (aiAnalysisData) {
+      setAiAnalysisData({
+        ...aiAnalysisData,
+        provider,
+        solution
+      });
+      setCurrentPage('ai-deployment');
+    }
+  };
+
+  const handleDeploymentComplete = (success: boolean, deploymentId?: string) => {
+    if (success) {
+      showToast({
+        type: 'success',
+        title: 'Deployment Successful',
+        message: `AI solution deployed successfully!`,
+        autoClose: true,
+        duration: 5000
+      });
+    } else {
+      showToast({
+        type: 'error',
+        title: 'Deployment Failed',
+        message: 'AI solution deployment failed. Please try again.',
+        autoClose: true
+      });
+    }
+    
+    // Navigate back to incident detail
+    if (aiAnalysisData?.incidentId) {
+      navigate('incident-detail', aiAnalysisData.incidentId);
+    } else {
+      navigate('dashboard');
+    }
+  };
+
+  const handleAICancel = () => {
+    // Navigate back to incident or dashboard
+    if (aiAnalysisData?.incidentId) {
+      navigate('incident-detail', aiAnalysisData.incidentId);
+    } else {
+      navigate('dashboard');
+    }
+    setAiAnalysisData(null);
+  };
+
+  // Other handlers (unchanged)
   const handleNavigateToAuth = () => {
     navigate('auth');
   };
@@ -227,7 +295,7 @@ const AppContent: React.FC = () => {
     navigate('pricing');
   };
 
-  // FIXED: Navigation Header with working settings button
+  // Navigation Header (unchanged - keeping existing)
   const NavigationHeader = () => (
     <nav className="backdrop-blur-xl border-b border-gray-800/50 sticky top-0 z-30 bg-black/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -246,7 +314,7 @@ const AppContent: React.FC = () => {
               OffCall AI
             </button>
             
-            {/* Plan Badge - FIXED: Remove FREE plan badge */}
+            {/* Plan Badge */}
             {subscription && subscription.plan_type !== 'free' && (
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                 subscription.plan_type === 'pro'
@@ -317,7 +385,7 @@ const AppContent: React.FC = () => {
               )}
             </div>
 
-            {/* FIXED: Settings Icon Button */}
+            {/* Settings Icon Button */}
             <button
               onClick={() => navigate('settings')}
               className={`p-2 rounded-lg transition-colors ${
@@ -368,8 +436,53 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // Render current page
+  // UPDATED Render current page with NEW AI COMPONENTS
   const renderCurrentPage = () => {
+    // NEW: AI Analysis page
+    if (currentPage === 'ai-analysis') {
+      if (!aiAnalysisData) {
+        navigate('dashboard');
+        return null;
+      }
+      return (
+        <ProtectedRoute requireSubscription={true} onUpgradeRequired={handleUpgradeRequired}>
+          <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+            <NavigationHeader />
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              <AIAnalysisDisplay
+                incidentId={aiAnalysisData.incidentId}
+                onDeploymentSelect={handleAIDeploymentSelect}
+              />
+            </div>
+          </div>
+        </ProtectedRoute>
+      );
+    }
+
+    // NEW: AI Deployment page  
+    if (currentPage === 'ai-deployment') {
+      if (!aiAnalysisData || !aiAnalysisData.provider || !aiAnalysisData.solution) {
+        navigate('dashboard');
+        return null;
+      }
+      return (
+        <ProtectedRoute requireSubscription={true} onUpgradeRequired={handleUpgradeRequired}>
+          <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+            <NavigationHeader />
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              <AIDeploymentInterface
+                incidentId={aiAnalysisData.incidentId}
+                provider={aiAnalysisData.provider}
+                solution={aiAnalysisData.solution}
+                onDeploymentComplete={handleDeploymentComplete}
+                onCancel={handleAICancel}
+              />
+            </div>
+          </div>
+        </ProtectedRoute>
+      );
+    }
+
     // Plan selection (for new users)
     if (currentPage === 'plan-selection') {
       return <PlanSelection onPlanSelected={handlePlanSelected} />;
@@ -390,7 +503,19 @@ const AppContent: React.FC = () => {
       return <PricingPage onPlanSelected={handlePlanSelected} />;
     }
 
-    // FIXED: Auth pages with LOGIN as default (was "register")
+    // Upgrade page
+    if (currentPage === 'upgrade') {
+      return (
+        <ProtectedRoute>
+          <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+            <NavigationHeader />
+            <UpgradePage onPlanSelected={handlePlanSelected} currentPlan={subscription?.plan_type || 'free'} />
+          </div>
+        </ProtectedRoute>
+      );
+    }
+
+    // Auth pages
     if (currentPage === 'auth') {
       return (
         <AuthPages 
@@ -403,89 +528,79 @@ const AppContent: React.FC = () => {
 
     // Protected pages (require authentication)
     if (!isAuthenticated) {
-      navigate('auth');
+      return <LandingPage onNavigateToAuth={handleNavigateToAuth} />;
+    }
+
+    // Dashboard
+    if (currentPage === 'dashboard') {
       return (
-        <AuthPages 
-          onLoginSuccess={() => navigate('dashboard')} 
-          onNavigateToLanding={() => navigate('landing')}
-          defaultMode="login"
-        />
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+          <NavigationHeader />
+          <Dashboard 
+            onShowAIAnalysis={handleShowAIAnalysis}
+            onNavigateToIncident={(incidentId: string) => navigate('incident-detail', incidentId)}
+          />
+        </div>
       );
     }
 
-    // Authenticated user pages
-    switch (currentPage) {
-      case 'dashboard':
-        return (
-          <ProtectedRoute>
-            <Dashboard onNavigateToIncident={(id) => navigate('incident-detail', id)} />
-          </ProtectedRoute>
-        );
-
-      case 'settings':
-        return (
-          <ProtectedRoute>
-            <SettingsPage />
-          </ProtectedRoute>
-        );
-
-      case 'profile':
-        return (
-          <ProtectedRoute>
-            <UserProfile />
-          </ProtectedRoute>
-        );
-
-      case 'notifications':
-        return (
-          <ProtectedRoute 
-            requireSubscription 
-            allowedPlans={['pro', 'enterprise']}
-            onUpgradeRequired={handleUpgradeRequired}
-          >
-            <NotificationSettings />
-          </ProtectedRoute>
-        );
-
-      case 'incident-detail':
-        return currentIncidentId ? (
-          <ProtectedRoute>
-            <IncidentDetail 
-              incidentId={currentIncidentId} 
-              onBack={() => navigate('dashboard')} 
-            />
-          </ProtectedRoute>
-        ) : null;
-
-      case 'upgrade':
-        return <UpgradePage onPlanSelected={handlePlanSelected} />;
-
-      default:
-        return (
-          <ProtectedRoute>
-            <Dashboard onNavigateToIncident={(id) => navigate('incident-detail', id)} />
-          </ProtectedRoute>
-        );
+    // Settings
+    if (currentPage === 'settings') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+          <NavigationHeader />
+          <SettingsPage />
+        </div>
+      );
     }
+
+    // Profile
+    if (currentPage === 'profile') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+          <NavigationHeader />
+          <UserProfile />
+        </div>
+      );
+    }
+
+    // Notifications
+    if (currentPage === 'notifications') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+          <NavigationHeader />
+          <NotificationSettings />
+        </div>
+      );
+    }
+
+    // Incident Detail
+    if (currentPage === 'incident-detail' && currentIncidentId) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+          <NavigationHeader />
+          <IncidentDetail 
+            incidentId={currentIncidentId}
+            onShowAIAnalysis={handleShowAIAnalysis}
+            onBack={() => navigate('dashboard')}
+          />
+        </div>
+      );
+    }
+
+    // Default fallback
+    return <Dashboard onShowAIAnalysis={handleShowAIAnalysis} onNavigateToIncident={(incidentId: string) => navigate('incident-detail', incidentId)} />;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
-      {/* Navigation header for authenticated users */}
-      {isAuthenticated && currentPage !== 'landing' && currentPage !== 'auth' && currentPage !== 'plan-selection' && <NavigationHeader />}
-      
-      {/* Main content */}
-      <main className={isAuthenticated && currentPage !== 'landing' && currentPage !== 'auth' && currentPage !== 'plan-selection' ? '' : 'min-h-screen'}>
-        {renderCurrentPage()}
-      </main>
-
-      {/* Toast notifications */}
+    <div className="App">
+      {renderCurrentPage()}
       <ToastNotifications />
     </div>
   );
 };
 
-// Root App Component
+// Main App component with providers
 const App: React.FC = () => {
   return (
     <AuthProvider>
