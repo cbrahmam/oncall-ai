@@ -15,7 +15,6 @@ class Organization(Base):
     is_active = Column(Boolean, default=True)
     max_users = Column(Integer, default=5)
     max_incidents_per_month = Column(Integer, default=100)
-    api_keys = relationship("APIKey", back_populates="organization")
     # Billing fields
     stripe_customer_id = Column(String(100), nullable=True)
     subscription_id = Column(String(100), nullable=True)
@@ -29,6 +28,7 @@ class Organization(Base):
     
     # Relationships - COMMENTED OUT API KEYS FOR NOW
     # api_keys = relationship("APIKey", back_populates="organization")
+    notifications = relationship("Notification", back_populates="organization")
     incidents = relationship("Incident", back_populates="organization")
     alerts = relationship("Alert", back_populates="organization") 
     escalation_policies = relationship("EscalationPolicy", back_populates="organization")
