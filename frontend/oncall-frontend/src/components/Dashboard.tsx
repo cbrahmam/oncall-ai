@@ -63,9 +63,10 @@ interface DashboardStats {
 
 interface DashboardProps {
   onNavigateToIncident?: (id: string) => void;
+  onShowAIAnalysis?: (incidentId: string, analysisData: any) => void; // ADD THIS
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident , onShowAIAnalysis }) => {
   const { user } = useAuth();
   const { showToast } = useNotifications();
   
@@ -110,6 +111,52 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
     return `${hours}h ${minutes}m`;
   };
 
+  const handleAIAnalysis = async (incidentId: string) => {
+  if (onShowAIAnalysis) {
+    setAnalyzingIncident(incidentId);
+    showToast({
+      type: 'info',
+      title: 'AI Analysis Starting',
+      message: 'Analyzing incident with Claude and Gemini...',
+      autoClose: false,
+    });
+
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE_URL}/incidents/${incidentId}/ai-analysis`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const analysisData = await response.json();
+        onShowAIAnalysis(incidentId, analysisData);
+        
+        showToast({
+          type: 'success',
+          title: 'AI Analysis Complete',
+          message: 'Claude and Gemini have analyzed the incident',
+          autoClose: true,
+        });
+      } else {
+        throw new Error(`Analysis failed: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Error getting AI analysis:', error);
+      showToast({
+        type: 'error',
+        title: 'AI Analysis Failed',
+        message: 'Unable to get AI analysis. Please check your API configuration.',
+        autoClose: true,
+      });
+    } finally {
+      setAnalyzingIncident(null);
+    }
+  }
+};
   const calculateSLACompliance = (incidents: Incident[]): string => {
     if (incidents.length === 0) return '0%';
     
@@ -237,65 +284,65 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToIncident }) => {
 
   // FIXED: Real AI analysis with actual API call
   const analyzeIncidentWithAI = async (incident: Incident) => {
-    setAnalyzingIncident(incident.id);
+  setAnalyzingIncident(incident.id);
+  
+  try {
+    const token = localStorage.getItem('access_token');
     
-    try {
-      const token = localStorage.getItem('access_token');
-      
-      showToast({
-        type: 'info',
-        title: 'AI Analysis Started',
-        message: 'Getting insights from AI...',
-        autoClose: true,
-      });
-      
-      // REAL API CALL - Replace mock data with actual endpoint
-      const response = await fetch(`${API_BASE_URL}/ai/analyze-incident`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          incident_id: incident.id,
-          incident_data: {
-            title: incident.title,
-            description: incident.description,
-            severity: incident.severity
-          }
-        }),
-      });
+    showToast({
+      type: 'info',
+      title: 'AI Analysis Started',
+      message: 'Getting insights from Claude and Gemini...',
+      autoClose: false, // Changed to false so user sees it's working
+    });
+    
+    // CORRECT API ENDPOINT - matches your new incidents.py
+    const response = await fetch(`${API_BASE_URL}/incidents/${incident.id}/ai-analysis`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      // No body needed - the endpoint gets incident data from database
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        setAiAnalyses(prev => ({
-          ...prev,
-          [incident.id]: data.analyses || []
-        }));
-        
-        showToast({
-          type: 'success',
-          title: 'AI Analysis Complete',
-          message: 'AI has analyzed the incident',
-          autoClose: true,
-        });
-      } else {
-        throw new Error('AI analysis failed');
+    if (response.ok) {
+      const data = await response.json();
+      
+      // Store the analyses in the correct format
+      setAiAnalyses(prev => ({
+        ...prev,
+        [incident.id]: data.analyses || []
+      }));
+      
+      // Call the onShowAIAnalysis callback if it exists
+      if (onShowAIAnalysis) {
+        onShowAIAnalysis(incident.id, data);
       }
-        
-    } catch (error) {
-      console.error('Error analyzing incident:', error);
+      
       showToast({
-        type: 'error',
-        title: 'Analysis Failed',
-        message: 'AI analysis is not available. Please configure your AI API keys in settings.',
+        type: 'success',
+        title: 'AI Analysis Complete',
+        message: 'Claude and Gemini have analyzed the incident',
         autoClose: true,
       });
-    } finally {
-      setAnalyzingIncident(null);
+    } else {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Analysis failed: ${response.status}`);
     }
-  };
-
+      
+  } catch (error) {
+    console.error('Error analyzing incident:', error);
+    showToast({
+      type: 'error',
+      title: 'Analysis Failed',
+      message: error instanceof Error ? error.message : 'AI analysis is not available. Please check your configuration.',
+      autoClose: true,
+    });
+  } finally {
+    setAnalyzingIncident(null);
+  }
+};
   const acknowledgeIncident = async (incidentId: string) => {
     try {
       const token = localStorage.getItem('access_token');

@@ -55,6 +55,7 @@ class Incident(Base):
     organization = relationship("Organization", back_populates="incidents")
     alerts = relationship("Alert", back_populates="incident")
     audit_logs = relationship("AuditLog", back_populates="incident")
+    deployments = relationship("Deployment", back_populates="incident")
     
     # Explicit foreign key relationships to avoid confusion
     assigned_to = relationship("User", foreign_keys=[assigned_to_id])

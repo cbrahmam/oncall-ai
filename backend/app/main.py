@@ -299,6 +299,13 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(billing.router, prefix="/api/v1/billing", tags=["Billing"])
 
+try:
+    from app.api.v1.endpoints import billing  
+    app.include_router(billing.router, prefix="/api/v1/billing", tags=["Billing"])
+    print('✅ Billing router loaded')
+except ImportError as e:
+    print(f'❌ CRITICAL: Billing router failed to load: {e}')
+
 # Include OAuth router if available
 if OAUTH_AVAILABLE:
     app.include_router(oauth.router, prefix="/api/v1/oauth", tags=["OAuth", "SSO"])
@@ -308,8 +315,6 @@ if SECURITY_AVAILABLE:
     app.include_router(security.router, prefix="/api/v1", tags=["Security"])
 
 # Include additional endpoints if available
-if INCIDENTS_AVAILABLE:
-    app.include_router(incidents.router, prefix="/api/v1/incidents", tags=["Incidents"])
 
 if WEBHOOKS_AVAILABLE:
     app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
