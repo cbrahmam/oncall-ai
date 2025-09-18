@@ -163,7 +163,7 @@ const AuthPages: React.FC<AuthPagesProps> = ({
 
       // ✅ FIXED: Using GET method with query parameter
       const response = await fetch(
-        `${baseUrl}/api/v1/oauth/authorize/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}`,
+        `${baseUrl}/oauth/authorize/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}`,
         {
           method: 'GET',  // <-- FIXED: Changed to GET
           headers: {

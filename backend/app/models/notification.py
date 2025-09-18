@@ -1,3 +1,4 @@
+# backend/app/models/notification.py - FIXED: renamed metadata to extra_data
 from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
@@ -23,8 +24,8 @@ class Notification(Base):
     incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id"), nullable=True)
     action_url = Column(String(500), nullable=True)
     
-    # Metadata
-    metadata = Column(JSON, default=dict)
+    # FIXED: Changed from 'metadata' to 'extra_data' to avoid SQLAlchemy reserved word
+    extra_data = Column(JSON, default=dict, nullable=True)
     
     # Status
     read = Column(Boolean, default=False)
@@ -37,3 +38,6 @@ class Notification(Base):
     user = relationship("User", back_populates="notifications")
     organization = relationship("Organization", back_populates="notifications")
     incident = relationship("Incident", back_populates="notifications")
+
+    def __repr__(self):
+        return f"<Notification(id='{self.id}', type='{self.type}', user_id='{self.user_id}')>"

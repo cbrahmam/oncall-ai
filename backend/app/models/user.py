@@ -51,7 +51,7 @@ class User(Base):
     # Relationships - FIXED with OAuth support
     organization = relationship("Organization", back_populates="users")
     oauth_accounts = relationship("OAuthAccount", back_populates="user", cascade="all, delete-orphan")
-    
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     # Fixed relationships with explicit foreign keys
     runbooks = relationship("Runbook", back_populates="created_by", foreign_keys="Runbook.created_by_id")
     audit_logs = relationship("AuditLog", back_populates="user", foreign_keys="AuditLog.user_id")

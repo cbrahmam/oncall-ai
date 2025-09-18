@@ -1,50 +1,123 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+# backend/app/api/v1/endpoints/notifications.py - FIXED: metadata → extra_data
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, and_, func
-from typing import List, Optional
+from sqlalchemy import select, and_, update, desc
+from sqlalchemy.orm import selectinload
+from typing import List, Optional, Dict, Any
 from datetime import datetime
-import uuid
 
 from app.database import get_async_session
-from app.core.deps import get_current_user
 from app.models.user import User
-from app.models.notification import Notification
-from app.schemas.notification import (
-    NotificationCreate,
-    NotificationResponse,
-    NotificationUpdate,
-    NotificationStats
-)
+from app.models.notification import Notification  # Uses fixed model
+from app.core.security import get_current_user
 
 router = APIRouter()
 
-@router.get("/", response_model=List[NotificationResponse])
+# Pydantic schemas
+from pydantic import BaseModel, Field
+
+class NotificationCreate(BaseModel):
+    type: str = Field(..., description="Notification type")
+    title: str = Field(..., description="Notification title") 
+    message: str = Field(..., description="Notification message")
+    severity: Optional[str] = Field(None, description="Notification severity")
+    incident_id: Optional[str] = Field(None, description="Related incident ID")
+    action_url: Optional[str] = Field(None, description="Action URL")
+    extra_data: Optional[Dict[str, Any]] = Field(None, description="Additional notification data")  # FIXED: renamed from metadata
+
+class NotificationResponse(BaseModel):
+    id: str
+    type: str
+    title: str
+    message: str
+    severity: Optional[str] = None
+    incident_id: Optional[str] = None
+    action_url: Optional[str] = None
+    extra_data: Optional[Dict[str, Any]] = None  # FIXED: renamed from metadata
+    read: bool
+    read_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class NotificationListResponse(BaseModel):
+    notifications: List[NotificationResponse]
+    total: int
+    unread_count: int
+
+@router.get("/", response_model=NotificationListResponse)
 async def get_notifications(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
-    filter_type: Optional[str] = Query(None),
-    unread_only: bool = Query(False),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    unread_only: bool = Query(default=False),
+    notification_type: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Get user's notifications with pagination and filtering"""
+    """Get notifications for the current user"""
     
-    query = select(Notification).where(
-        Notification.user_id == current_user.id
-    )
-    
-    if filter_type:
-        query = query.where(Notification.type == filter_type)
-    
-    if unread_only:
-        query = query.where(Notification.read == False)
-    
-    query = query.order_by(Notification.created_at.desc()).offset(skip).limit(limit)
-    
-    result = await db.execute(query)
-    notifications = result.scalars().all()
-    
-    return notifications
+    try:
+        # Build base query
+        query = select(Notification).where(
+            Notification.user_id == current_user.id
+        )
+        
+        # Apply filters
+        if unread_only:
+            query = query.where(Notification.read == False)
+        
+        if notification_type:
+            query = query.where(Notification.type == notification_type)
+        
+        # Get total count
+        total_query = query
+        count_result = await db.execute(total_query)
+        total = len(count_result.scalars().all())
+        
+        # Get unread count
+        unread_query = select(Notification).where(
+            and_(
+                Notification.user_id == current_user.id,
+                Notification.read == False
+            )
+        )
+        unread_result = await db.execute(unread_query)
+        unread_count = len(unread_result.scalars().all())
+        
+        # Apply pagination and ordering
+        query = query.order_by(desc(Notification.created_at))
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        
+        # Execute query
+        result = await db.execute(query)
+        notifications = result.scalars().all()
+        
+        # Convert to response format
+        notification_responses = []
+        for notification in notifications:
+            notification_responses.append(NotificationResponse(
+                id=str(notification.id),
+                type=notification.type,
+                title=notification.title,
+                message=notification.message,
+                severity=notification.severity,
+                incident_id=str(notification.incident_id) if notification.incident_id else None,
+                action_url=notification.action_url,
+                extra_data=notification.extra_data,  # FIXED: uses extra_data
+                read=notification.read,
+                read_at=notification.read_at,
+                created_at=notification.created_at
+            ))
+        
+        return NotificationListResponse(
+            notifications=notification_responses,
+            total=total,
+            unread_count=unread_count
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get notifications: {str(e)}")
 
 @router.post("/", response_model=NotificationResponse)
 async def create_notification(
@@ -54,26 +127,43 @@ async def create_notification(
 ):
     """Create a new notification"""
     
-    notification = Notification(
-        id=uuid.uuid4(),
-        user_id=current_user.id,
-        organization_id=current_user.organization_id,
-        type=notification_data.type,
-        title=notification_data.title,
-        message=notification_data.message,
-        severity=notification_data.severity,
-        incident_id=notification_data.incident_id,
-        action_url=notification_data.action_url,
-        metadata=notification_data.metadata or {},
-        read=False,
-        created_at=datetime.utcnow()
-    )
-    
-    db.add(notification)
-    await db.commit()
-    await db.refresh(notification)
-    
-    return notification
+    try:
+        notification = Notification(
+            id=uuid.uuid4(),
+            user_id=current_user.id,
+            organization_id=current_user.organization_id,
+            type=notification_data.type,
+            title=notification_data.title,
+            message=notification_data.message,
+            severity=notification_data.severity,
+            incident_id=notification_data.incident_id,
+            action_url=notification_data.action_url,
+            extra_data=notification_data.extra_data or {},  # FIXED: uses extra_data
+            read=False,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(notification)
+        await db.commit()
+        await db.refresh(notification)
+        
+        return NotificationResponse(
+            id=str(notification.id),
+            type=notification.type,
+            title=notification.title,
+            message=notification.message,
+            severity=notification.severity,
+            incident_id=str(notification.incident_id) if notification.incident_id else None,
+            action_url=notification.action_url,
+            extra_data=notification.extra_data,  # FIXED: uses extra_data
+            read=notification.read,
+            read_at=notification.read_at,
+            created_at=notification.created_at
+        )
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create notification: {str(e)}")
 
 @router.patch("/{notification_id}/read", response_model=NotificationResponse)
 async def mark_notification_read(
@@ -102,7 +192,19 @@ async def mark_notification_read(
     await db.commit()
     await db.refresh(notification)
     
-    return notification
+    return NotificationResponse(
+        id=str(notification.id),
+        type=notification.type,
+        title=notification.title,
+        message=notification.message,
+        severity=notification.severity,
+        incident_id=str(notification.incident_id) if notification.incident_id else None,
+        action_url=notification.action_url,
+        extra_data=notification.extra_data,  # FIXED: uses extra_data
+        read=notification.read,
+        read_at=notification.read_at,
+        created_at=notification.created_at
+    )
 
 @router.patch("/mark-all-read")
 async def mark_all_notifications_read(
@@ -132,7 +234,7 @@ async def delete_notification(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Delete notification"""
+    """Delete a notification"""
     
     result = await db.execute(
         select(Notification).where(
@@ -150,31 +252,24 @@ async def delete_notification(
     await db.delete(notification)
     await db.commit()
     
-    return {"message": "Notification deleted"}
+    return {"message": "Notification deleted successfully"}
 
-@router.get("/stats", response_model=NotificationStats)
-async def get_notification_stats(
+@router.get("/unread-count")
+async def get_unread_count(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Get notification statistics"""
+    """Get unread notification count"""
     
-    # Get counts using aggregation
-    stats_query = select(
-        func.count(Notification.id).label('total_count'),
-        func.sum(func.cast(~Notification.read, db.Integer)).label('unread_count'),
-        func.sum(func.case((Notification.type == 'incident', 1), else_=0)).label('incidents_count'),
-        func.sum(func.case((Notification.type == 'alert', 1), else_=0)).label('alerts_count'),
-        func.sum(func.case((Notification.type == 'system', 1), else_=0)).label('system_count')
-    ).where(Notification.user_id == current_user.id)
-    
-    result = await db.execute(stats_query)
-    stats = result.first()
-    
-    return NotificationStats(
-        total_count=stats.total_count or 0,
-        unread_count=stats.unread_count or 0,
-        incidents_count=stats.incidents_count or 0,
-        alerts_count=stats.alerts_count or 0,
-        system_count=stats.system_count or 0
+    result = await db.execute(
+        select(Notification).where(
+            and_(
+                Notification.user_id == current_user.id,
+                Notification.read == False
+            )
+        )
     )
+    
+    unread_count = len(result.scalars().all())
+    
+    return {"unread_count": unread_count}
