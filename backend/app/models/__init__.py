@@ -1,3 +1,4 @@
+# backend/app/models/__init__.py - COMPLETE WITH ALL MODELS
 from .organization import Organization
 from .user import User
 from .incident import Incident
@@ -7,6 +8,10 @@ from .integration import Integration
 from .runbook import Runbook
 from .audit_log import AuditLog
 from .team import Team
+from .notification import Notification
+from .oauth_account import OAuthAccount
+from .api_keys import APIKey
+from .deployment import Deployment, DeploymentStep
 
 __all__ = [
     "Organization",
@@ -17,5 +22,10 @@ __all__ = [
     "Integration",
     "Runbook",
     "AuditLog",
-    "Team"
+    "Team",
+    "Notification",
+    "OAuthAccount", 
+    "APIKey",
+    "Deployment",
+    "DeploymentStep"
 ]

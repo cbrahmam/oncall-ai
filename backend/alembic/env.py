@@ -1,4 +1,4 @@
-# backend/alembic/env.py - UPDATED VERSION
+# backend/alembic/env.py - COMPLETE WITH ALL MODELS
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -22,8 +22,10 @@ from app.models.integration import Integration
 from app.models.runbook import Runbook
 from app.models.audit_log import AuditLog
 from app.models.oauth_account import OAuthAccount
-# ADD THIS NEW IMPORT:
 from app.models.api_keys import APIKey
+from app.models.team import Team
+from app.models.notification import Notification
+from app.models.deployment import Deployment, DeploymentStep
 
 # this is the Alembic Config object
 config = context.config

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey
+# backend/app/models/runbook.py - COMPLETE FIXED VERSION
+from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -10,20 +11,24 @@ class Runbook(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
-    created_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
-    # Runbook details
+    # Content
     title = Column(String(255), nullable=False)
     description = Column(Text)
     content = Column(Text, nullable=False)  # Markdown content
     
-    # Categorization
-    tags = Column(JSONB, default=list)
-    service_names = Column(ARRAY(String), default=list)
-    alert_patterns = Column(JSONB, default=list)  # For auto-suggestion
+    # Organization
+    tags = Column(JSONB, default=list)  # ["database", "outage", "frontend"]
+    service_names = Column(ARRAY(String), default=list)  # Services this runbook applies to
     
-    # Metadata
+    # Automation
+    alert_patterns = Column(JSONB, default=list)  # Patterns that should trigger this runbook
+    
+    # Status
     is_active = Column(Boolean, default=True)
+    
+    # Usage tracking
     usage_count = Column(Integer, default=0)
     last_used_at = Column(DateTime(timezone=True))
     
@@ -33,4 +38,7 @@ class Runbook(Base):
     
     # Relationships
     organization = relationship("Organization", back_populates="runbooks")
-    created_by = relationship("User", back_populates="runbooks")
+    created_by = relationship("User", back_populates="runbooks", foreign_keys=[created_by_id])
+
+    def __repr__(self):
+        return f"<Runbook(id='{self.id}', title='{self.title}')>"

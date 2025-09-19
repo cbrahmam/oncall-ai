@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
+# backend/app/models/audit_log.py - COMPLETE FIXED VERSION
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -25,8 +26,8 @@ class AuditLog(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id"), nullable=True)
     
     # Action details
     action = Column(Enum(AuditAction), nullable=False)
@@ -35,12 +36,15 @@ class AuditLog(Base):
     # Context
     ip_address = Column(INET)
     user_agent = Column(String(500))
-    extra_data = Column(JSONB, default=dict)  # Changed from 'metadata' to 'extra_data'
+    extra_data = Column(JSONB, default=dict)  # Changed from 'metadata' to avoid SQLAlchemy reserved word
     
     # Timing
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
     organization = relationship("Organization", back_populates="audit_logs")
-    user = relationship("User", back_populates="audit_logs")
+    user = relationship("User", back_populates="audit_logs", foreign_keys=[user_id])
     incident = relationship("Incident", back_populates="audit_logs")
+
+    def __repr__(self):
+        return f"<AuditLog(id='{self.id}', action='{self.action}')>"

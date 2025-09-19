@@ -14,6 +14,8 @@ import pyotp
 import qrcode
 import io
 import base64
+import re
+import secrets
 
 router = APIRouter()
 
@@ -33,10 +35,32 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_async_s
                 detail="User with this email already exists"
             )
         
-        # Create organization first
+        # Generate organization slug from name
+        base_slug = re.sub(r'[^a-zA-Z0-9]', '-', user_data.organization_name).lower()
+        base_slug = re.sub(r'-+', '-', base_slug).strip('-')
+        
+        # Ensure slug is unique by adding random suffix if needed
+        slug = base_slug
+        max_attempts = 10
+        attempt = 0
+        
+        while attempt < max_attempts:
+            # Check if slug already exists
+            slug_result = await db.execute(
+                select(Organization).where(Organization.slug == slug)
+            )
+            if not slug_result.scalar_one_or_none():
+                break
+            
+            # Add random suffix and try again
+            slug = f"{base_slug}-{secrets.token_urlsafe(4).lower()}"
+            attempt += 1
+        
+        # Create organization with slug
         organization = Organization(
             id=uuid.uuid4(),
             name=user_data.organization_name,
+            slug=slug,  # This was missing!
             is_active=True,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()

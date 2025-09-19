@@ -1,4 +1,4 @@
-# backend/app/models/notification.py - FIXED: renamed metadata to extra_data
+# backend/app/models/notification.py - COMPLETE FIXED VERSION
 from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
@@ -34,7 +34,7 @@ class Notification(Base):
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relationships
+    # Relationships - ALL PROPERLY DEFINED
     user = relationship("User", back_populates="notifications")
     organization = relationship("Organization", back_populates="notifications")
     incident = relationship("Incident", back_populates="notifications")

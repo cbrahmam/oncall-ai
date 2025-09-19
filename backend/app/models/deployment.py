@@ -1,5 +1,5 @@
-# backend/app/models/deployment.py
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Enum
+# backend/app/models/deployment.py - COMPLETE FIXED VERSION
+from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Integer, Enum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -9,39 +9,38 @@ from app.database import Base
 
 class DeploymentStatus(str, enum.Enum):
     PENDING = "pending"
-    RUNNING = "running" 
-    PAUSED = "paused"
-    COMPLETED = "completed"
+    RUNNING = "running"
+    SUCCESS = "success"
     FAILED = "failed"
     CANCELLED = "cancelled"
-    ROLLING_BACK = "rolling_back"
 
-class StepStatus(str, enum.Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed" 
-    FAILED = "failed"
-    SKIPPED = "skipped"
+class DeploymentType(str, enum.Enum):
+    HOTFIX = "hotfix"
+    ROLLBACK = "rollback"
+    ROUTINE = "routine"
+    EMERGENCY = "emergency"
 
 class Deployment(Base):
     __tablename__ = "deployments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id"), nullable=False, index=True)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True)
-    
-    # Deployment metadata
-    provider = Column(String(50), nullable=False)  # claude, gemini, manual
-    solution_type = Column(String(50), default="automated")  # automated, manual, rollback
-    status = Column(Enum(DeploymentStatus), default=DeploymentStatus.PENDING, nullable=False)
-    
-    # User information
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id"), nullable=False)
     created_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    created_by_name = Column(String(255), nullable=False)
     
-    # Solution details
-    solution_data = Column(JSONB)  # Original AI solution data
-    total_steps = Column(Integer, default=0)
+    # Deployment details
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    deployment_type = Column(Enum(DeploymentType), default=DeploymentType.ROUTINE)
+    status = Column(Enum(DeploymentStatus), default=DeploymentStatus.PENDING)
+    
+    # Source control
+    repository_url = Column(String(500))
+    branch = Column(String(100))
+    commit_hash = Column(String(40))
+    
+    # Execution details
+    deployment_script = Column(Text)  # Commands to run
     completed_steps = Column(Integer, default=0)
     failed_steps = Column(Integer, default=0)
     
@@ -84,40 +83,23 @@ class DeploymentStep(Base):
     __tablename__ = "deployment_steps"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    deployment_id = Column(UUID(as_uuid=True), ForeignKey("deployments.id"), nullable=False, index=True)
+    deployment_id = Column(UUID(as_uuid=True), ForeignKey("deployments.id"), nullable=False)
     
-    # Step information
-    step_index = Column(Integer, nullable=False)  # Order of execution
-    command = Column(Text, nullable=False)  # Command to execute
-    description = Column(Text)  # Human-readable description
-    status = Column(Enum(StepStatus), default=StepStatus.PENDING, nullable=False)
+    # Step details
+    step_number = Column(Integer, nullable=False)
+    name = Column(String(255), nullable=False)
+    command = Column(Text, nullable=False)
+    status = Column(Enum(DeploymentStatus), default=DeploymentStatus.PENDING)
     
-    # Execution results
-    exit_code = Column(Integer)
-    output = Column(Text)  # stdout
-    error_output = Column(Text)  # stderr
-    
-    # Timing
+    # Output and timing
+    output = Column(Text)
+    error_output = Column(Text)
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
-    duration = Column(Integer)  # Duration in seconds
-    timeout_seconds = Column(Integer, default=300)  # 5 minute default timeout
-    
-    # Retry logic
-    retry_count = Column(Integer, default=0)
-    max_retries = Column(Integer, default=3)
-    
-    # Step metadata
-    step_type = Column(String(50), default="command")  # command, script, validation, rollback
-    dependencies = Column(JSONB)  # List of step IDs this depends on
-    conditions = Column(JSONB)  # Conditions that must be met
-    
-    # Security
-    requires_approval = Column(Boolean, default=False)
-    approved = Column(Boolean, default=False)
+    duration = Column(Integer)  # seconds
     
     # Relationships
     deployment = relationship("Deployment", back_populates="steps")
 
     def __repr__(self):
-        return f"<DeploymentStep(id={self.id}, deployment_id={self.deployment_id}, step_index={self.step_index}, status={self.status})>"
+        return f"<DeploymentStep(id={self.id}, deployment_id={self.deployment_id}, step={self.step_number})>"

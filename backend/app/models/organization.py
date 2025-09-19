@@ -1,3 +1,4 @@
+# backend/app/models/organization.py - COMPLETE FIXED VERSION
 from sqlalchemy import Column, String, DateTime, Boolean, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -15,6 +16,7 @@ class Organization(Base):
     is_active = Column(Boolean, default=True)
     max_users = Column(Integer, default=5)
     max_incidents_per_month = Column(Integer, default=100)
+    
     # Billing fields
     stripe_customer_id = Column(String(100), nullable=True)
     subscription_id = Column(String(100), nullable=True)
@@ -26,8 +28,8 @@ class Organization(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relationships - COMMENTED OUT API KEYS FOR NOW
-    # api_keys = relationship("APIKey", back_populates="organization")
+    # Relationships - ALL FIXED WITH PROPER BIDIRECTIONAL DEFINITIONS
+    api_keys = relationship("APIKey", back_populates="organization")
     notifications = relationship("Notification", back_populates="organization")
     incidents = relationship("Incident", back_populates="organization")
     alerts = relationship("Alert", back_populates="organization") 
